@@ -66,7 +66,7 @@ eoCheckPoint<EOT>& do_make_checkpoint(eoParser& _parser, eoState& _state, eoValu
 #ifndef _MSC_VER
     // the CtrlC monitoring interception
     eoSignal<EOT> *mon_ctrlCCont;
-    eoValueParam<bool>& mon_ctrlCParam = _parser.createParam(false, "monitor-with-CtrlC", "Monitor current generation upon Ctrl C",0, "Stopping criterion");
+    eoValueParam<bool>& mon_ctrlCParam = _parser.getORcreateParam(false, "monitor-with-CtrlC", "Monitor current generation upon Ctrl C",0, "Stopping criterion");
     if (mon_ctrlCParam.value())
       {
         mon_ctrlCCont = new eoSignal<EOT>;
@@ -82,8 +82,8 @@ eoCheckPoint<EOT>& do_make_checkpoint(eoParser& _parser, eoState& _state, eoValu
     //////////////////
 
     // is nb Eval to be used as counter?
-    eoValueParam<bool>& useEvalParam = _parser.createParam(true, "useEval", "Use nb of eval. as counter (vs nb of gen.)", '\0', "Output");
-    eoValueParam<bool>& useTimeParam = _parser.createParam(true, "useTime", "Display time (s) every generation", '\0', "Output");
+    eoValueParam<bool>& useEvalParam = _parser.getORcreateParam(true, "useEval", "Use nb of eval. as counter (vs nb of gen.)", '\0', "Output");
+    eoValueParam<bool>& useTimeParam = _parser.getORcreateParam(true, "useTime", "Display time (s) every generation", '\0', "Output");
     // if we want the time, we need an eoTimeCounter
     eoTimeCounter * tCounter = NULL;
 
@@ -99,10 +99,10 @@ eoCheckPoint<EOT>& do_make_checkpoint(eoParser& _parser, eoState& _state, eoValu
     checkpoint->add(*generationCounter);
 
     // dir for DISK output
-    eoValueParam<std::string>& dirNameParam =  _parser.createParam(std::string("Res"), "resDir", "Directory to store DISK outputs", '\0', "Output - Disk");
+    eoValueParam<std::string>& dirNameParam =  _parser.getORcreateParam(std::string("Res"), "resDir", "Directory to store DISK outputs", '\0', "Output - Disk");
 
     // shoudl we empty it if exists
-    eoValueParam<bool>& eraseParam = _parser.createParam(true, "eraseDir", "erase files in dirName if any", '\0', "Output - Disk");
+    eoValueParam<bool>& eraseParam = _parser.getORcreateParam(true, "eraseDir", "erase files in dirName if any", '\0', "Output - Disk");
 
     bool dirOK = false;            // not tested yet
 
@@ -122,9 +122,9 @@ eoCheckPoint<EOT>& do_make_checkpoint(eoParser& _parser, eoState& _state, eoValu
 
     // Best fitness in population
     //---------------------------
-    eoValueParam<bool>& printBestParam = _parser.createParam(true, "printBestStat", "Print Best/avg/stdev every gen.", '\0', "Output");
-    eoValueParam<bool>& plotBestParam = _parser.createParam(false, "plotBestStat", "Plot Best/avg Stat", '\0', "Output - Graphical");
-    eoValueParam<bool>& fileBestParam = _parser.createParam(false, "fileBestStat", "Output bes/avg/std to file", '\0', "Output - Disk");
+    eoValueParam<bool>& printBestParam = _parser.getORcreateParam(true, "printBestStat", "Print Best/avg/stdev every gen.", '\0', "Output");
+    eoValueParam<bool>& plotBestParam = _parser.getORcreateParam(false, "plotBestStat", "Plot Best/avg Stat", '\0', "Output - Graphical");
+    eoValueParam<bool>& fileBestParam = _parser.getORcreateParam(false, "fileBestStat", "Output bes/avg/std to file", '\0', "Output - Disk");
 
     eoBestFitnessStat<EOT> *bestStat = NULL;
     if ( printBestParam.value() || plotBestParam.value() || fileBestParam.value() )
@@ -173,7 +173,7 @@ eoCheckPoint<EOT>& do_make_checkpoint(eoParser& _parser, eoState& _state, eoValu
     // Dump of the whole population
     //-----------------------------
     eoSortedPopStat<EOT> *popStat = NULL;
-    eoValueParam<bool>& printPopParam = _parser.createParam(false, "printPop", "Print sorted pop. every gen.", '\0', "Output");
+    eoValueParam<bool>& printPopParam = _parser.getORcreateParam(false, "printPop", "Print sorted pop. every gen.", '\0', "Output");
 
     if ( printPopParam.value() ) // we do want pop dump
 	{
@@ -188,7 +188,7 @@ eoCheckPoint<EOT>& do_make_checkpoint(eoParser& _parser, eoState& _state, eoValu
 	}
 
     // do we wnat some histogram of fitnesses snpashots?
-    eoValueParam<bool> plotHistogramParam = _parser.createParam(false, "plotHisto", "Plot histogram of fitnesses", '\0', "Output - Graphical");
+    eoValueParam<bool> plotHistogramParam = _parser.getORcreateParam(false, "plotHisto", "Plot histogram of fitnesses", '\0', "Output - Graphical");
 
     ///////////////
     // The monitors
@@ -309,7 +309,7 @@ eoCheckPoint<EOT>& do_make_checkpoint(eoParser& _parser, eoState& _state, eoValu
 
     // feed the state to state savers
     // save state every N  generation
-    eoValueParam<unsigned>& saveFrequencyParam = _parser.createParam(unsigned(0), "saveFrequency", "Save every F generation (0 = only final state, absent = never)", '\0', "Persistence" );
+    eoValueParam<unsigned>& saveFrequencyParam = _parser.getORcreateParam(unsigned(0), "saveFrequency", "Save every F generation (0 = only final state, absent = never)", '\0', "Persistence" );
 
     if (_parser.isItThere(saveFrequencyParam))
 	{
@@ -329,7 +329,7 @@ eoCheckPoint<EOT>& do_make_checkpoint(eoParser& _parser, eoState& _state, eoValu
 	}
 
     // save state every T seconds
-    eoValueParam<unsigned>& saveTimeIntervalParam = _parser.createParam(unsigned(0), "saveTimeInterval", "Save every T seconds (0 or absent = never)", '\0',"Persistence" );
+    eoValueParam<unsigned>& saveTimeIntervalParam = _parser.getORcreateParam(unsigned(0), "saveTimeInterval", "Save every T seconds (0 or absent = never)", '\0',"Persistence" );
     if (_parser.isItThere(saveTimeIntervalParam) && saveTimeIntervalParam.value()>0)
 	{
 	    // first make sure dirName is OK

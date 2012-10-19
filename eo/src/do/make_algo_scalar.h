@@ -86,7 +86,7 @@ eoAlgo<EOT> & do_make_algo_scalar(eoParser& _parser, eoState& _state, eoEvalFunc
       else
         comment = "Selection: DetTour(T), StochTour(t), Roulette, Ranking(p,e), Sharing(sigma_share) or Sequential(ordered/unordered)";
 
-  eoValueParam<eoParamParamType>& selectionParam = _parser.createParam(eoParamParamType("DetTour(2)"), "selection", comment, 'S', "Evolution Engine");
+  eoValueParam<eoParamParamType>& selectionParam = _parser.getORcreateParam(eoParamParamType("DetTour(2)"), "selection", comment, 'S', "Evolution Engine");
 
   eoParamParamType & ppSelect = selectionParam.value(); // std::pair<std::string,std::vector<std::string> >
 
@@ -212,10 +212,10 @@ eoAlgo<EOT> & do_make_algo_scalar(eoParser& _parser, eoState& _state, eoEvalFunc
   _state.storeFunctor(select);
 
   // the number of offspring
-    eoValueParam<eoHowMany>& offspringRateParam =  _parser.createParam(eoHowMany(1.0), "nbOffspring", "Nb of offspring (percentage or absolute)", 'O', "Evolution Engine");
+    eoValueParam<eoHowMany>& offspringRateParam =  _parser.getORcreateParam(eoHowMany(1.0), "nbOffspring", "Nb of offspring (percentage or absolute)", 'O', "Evolution Engine");
 
   // the replacement
-  eoValueParam<eoParamParamType>& replacementParam = _parser.createParam(eoParamParamType("Comma"), "replacement", "Replacement: Comma, Plus or EPTour(T), SSGAWorst, SSGADet(T), SSGAStoch(t)", 'R', "Evolution Engine");
+  eoValueParam<eoParamParamType>& replacementParam = _parser.getORcreateParam(eoParamParamType("Comma"), "replacement", "Replacement: Comma, Plus or EPTour(T), SSGAWorst, SSGADet(T), SSGAStoch(t)", 'R', "Evolution Engine");
 
   eoParamParamType & ppReplace = replacementParam.value(); // std::pair<std::string,std::vector<std::string> >
 
@@ -288,7 +288,7 @@ eoAlgo<EOT> & do_make_algo_scalar(eoParser& _parser, eoState& _state, eoEvalFunc
   _state.storeFunctor(replace);
 
   // adding weak elitism
-  eoValueParam<bool>& weakElitismParam =  _parser.createParam(false, "weakElitism", "Old best parent replaces new worst offspring *if necessary*", 'w', "Evolution Engine");
+  eoValueParam<bool>& weakElitismParam =  _parser.getORcreateParam(false, "weakElitism", "Old best parent replaces new worst offspring *if necessary*", 'w', "Evolution Engine");
   if (weakElitismParam.value())
     {
       eoReplacement<EOT> *replaceTmp = replace;
