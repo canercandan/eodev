@@ -39,7 +39,7 @@ namespace eoserial
              * @brief Serializes the object to JSON format.
              * @return A JSON object created with new.
              */
-            virtual eoserial::Object* pack() const = 0;
+	    virtual eoserial::Object* pack(eoserial::Object* json = NULL) const = 0;
     };
 
     /**

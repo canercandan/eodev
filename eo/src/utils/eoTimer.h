@@ -236,9 +236,9 @@ class eoTimerStat
                     ->deserialize< std::vector<double>, eoserial::Array::UnpackAlgorithm >( wtime );
             }
 
-            eoserial::Object* pack( void ) const
+            eoserial::Object* pack( eoserial::Object* = NULL ) const
             {
-                eoserial::Object* obj = new eoserial::Object;
+		eoserial::Object* obj = new eoserial::Object;
                 obj->add("utime", eoserial::makeArray< std::vector<long int>, eoserial::MakeAlgorithm >( utime ) );
                 obj->add("stime", eoserial::makeArray< std::vector<long int>, eoserial::MakeAlgorithm >( stime ) );
                 obj->add("wtime", eoserial::makeArray< std::vector<double>, eoserial::MakeAlgorithm >( wtime ) );
@@ -259,7 +259,7 @@ class eoTimerStat
             }
         }
 
-        eoserial::Object* pack( void ) const
+        eoserial::Object* pack( eoserial::Object* = NULL ) const
         {
             eoserial::Object* obj = new eoserial::Object;
             for( std::map<std::string, Stat >::const_iterator it = _stats.begin(), final = _stats.end();
