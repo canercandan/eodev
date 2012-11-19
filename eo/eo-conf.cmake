@@ -13,6 +13,7 @@ SET(WITH_OMP FALSE CACHE BOOL "Use OpenMP ?" FORCE)
 # openmpi and boost::mpi.
 
 SET(WITH_MPI TRUE CACHE BOOL "Use mpi ?" FORCE)
-SET(MPI_DIR "/mpi/directory" CACHE PATH "OpenMPI directory" FORCE)
+SET(WITH_BOOST TRUE CACHE BOOL "Use boost ?" FORCE)
+SET(MPI_DIR "/usr/local" CACHE PATH "OpenMPI directory" FORCE)
 
-SET(CXX11 FALSE CACHE BOOL "Use c++11 ?" FORCE)
+SET(CXX11 TRUE CACHE BOOL "Use c++11 ?" FORCE)
