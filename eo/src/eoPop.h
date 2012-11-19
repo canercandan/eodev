@@ -48,6 +48,19 @@ Authors:
 
 #ifdef WITH_MPI
 #include <serial/eoSerial.h>
+
+// #ifdef WITH_BOOST
+#include <boost/mpi.hpp>
+
+#include <boost/archive/text_oarchive.hpp>
+#include <boost/archive/text_iarchive.hpp>
+
+#include <boost/serialization/vector.hpp>
+#include <boost/serialization/base_object.hpp>
+#include <boost/serialization/utility.hpp>
+#include <boost/serialization/assume_abstract.hpp>
+// #endif // !WITH_BOOST
+
 #endif // !WITH_MPI
 
 /** A std::vector of EO object, to be used in all algorithms
@@ -72,6 +85,10 @@ class eoPop: public std::vector<EOT>, public eoObject, public eoPersistent
 #endif // !WITH_MPI
 {
     public:
+
+#if defined(WITH_MPI) and defined(WITH_BOOST)
+        friend class boost::serialization::access;
+#endif
 
         using std::vector<EOT>::size;
         using std::vector<EOT>::resize;
@@ -386,18 +403,44 @@ class eoPop: public std::vector<EOT>, public eoObject, public eoPersistent
 	void unpack( const eoserial::Object* obj )
 	{
 	    this->clear();
-	    eoserial::unpackArray
-		< std::vector<EOT>, eoserial::Array::UnpackAlgorithm >
-	    ( *obj, "vector", *this );
+
+	    size_t newsize;
+            eoserial::unpack( *obj, "size", newsize );
+	    resize(newsize);
+
+	    for (size_t i = 0; i < size(); ++i)
+		{
+		    this->operator[](i).unpack( obj );
+		}
 	}
 
-	eoserial::Object* pack( void ) const
+	eoserial::Object* pack( eoserial::Object* json = NULL ) const
 	{
-	    eoserial::Object* obj = new eoserial::Object;
-	    obj->add( "vector", eoserial::makeArray< std::vector<EOT>, eoserial::MakeAlgorithm >( *this ) );
+	    eoserial::Object* obj = json;
+	    if (NULL == obj)
+		{
+		    obj = new eoserial::Object;
+		}
+
+	    obj->add( "size", eoserial::make( size() ) );
+
+	    for (size_t i = 0; i < size(); ++i)
+		{
+		    this->operator[](i).pack( obj );
+		}
+
 	    return obj;
 	}
 #endif // !WITH_MPI
+
+public:
+#if defined(WITH_MPI)// and defined(WITH_BOOST)
+	template<class Archive>
+	void serialize(Archive & ar, const unsigned int /*version*/)
+	{
+	    ar & boost::serialization::base_object< std::vector<EOT> >(*this);
+	}
+#endif
 
 }; // class eoPop
 
