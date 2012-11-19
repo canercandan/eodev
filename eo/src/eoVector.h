@@ -30,6 +30,19 @@ Old contact: todos@geneura.ugr.es, http://geneura.ugr.es
 
 #ifdef WITH_MPI
 #include <serial/eoSerial.h>
+
+// #ifdef WITH_BOOST
+#include <boost/mpi.hpp>
+
+#include <boost/archive/text_oarchive.hpp>
+#include <boost/archive/text_iarchive.hpp>
+
+#include <boost/serialization/vector.hpp>
+#include <boost/serialization/base_object.hpp>
+#include <boost/serialization/utility.hpp>
+#include <boost/serialization/assume_abstract.hpp>
+// #endif // !WITH_BOOST
+
 #endif // !WITH_MPI
 
 /**
@@ -59,6 +72,10 @@ class eoVector : public EO<FitT>, public std::vector<GeneType>
 #endif // !WITH_MPI
 {
 public:
+
+#if defined(WITH_MPI) and defined(WITH_BOOST)
+    friend class boost::serialization::access;
+#endif
 
     using EO<FitT>::invalidate;
     using std::vector<GeneType>::operator[];
@@ -139,9 +156,7 @@ public:
     void unpack( const eoserial::Object* obj )
 	{
 	    this->clear();
-	    eoserial::unpackArray
-		< std::vector<GeneType>, eoserial::Array::UnpackAlgorithm >
-		( *obj, "vector", *this );
+	    eoserial::unpackArray< std::vector<GeneType>, eoserial::Array::UnpackAlgorithm >( *obj, "vector", *this );
 
 	    bool invalidFitness;
             eoserial::unpack( *obj, "invalid_fitness", invalidFitness );
@@ -155,11 +170,24 @@ public:
 		    eoserial::unpack( *obj, "fitness", f );
 		    this->fitness( f );
 		}
+
+	    // DIM
+	    lastIslands.clear();
+	    eoserial::unpackArray< std::vector< size_t >, eoserial::Array::UnpackAlgorithm >( *obj, "lastIslands", lastIslands );
+	    lastIslandsCount.clear();
+	    eoserial::unpackArray< std::vector< size_t >, eoserial::Array::UnpackAlgorithm >( *obj, "lastIslandsCount", lastIslandsCount );
+	    lastFitnesses.clear();
+	    eoserial::unpackArray< std::vector< FitT >, eoserial::Array::UnpackAlgorithm >( *obj, "lastFitnesses", lastFitnesses );
+	    // !DIM
 	}
 
-    eoserial::Object* pack( void ) const
+    eoserial::Object* pack( eoserial::Object* json = NULL ) const
 	{
-	    eoserial::Object* obj = new eoserial::Object;
+	    eoserial::Object* obj = json;
+	    if (NULL == obj)
+		{
+		    obj = new eoserial::Object;
+		}
 	    obj->add( "vector", eoserial::makeArray< std::vector<GeneType>, eoserial::MakeAlgorithm >( *this ) );
 
 	    bool invalidFitness = this->invalid();
@@ -169,9 +197,96 @@ public:
 		    obj->add( "fitness", eoserial::make( this->fitness() ) );
 		}
 
+	    // DIM
+	    obj->add( "lastIslands", eoserial::makeArray< std::vector< size_t >, eoserial::MakeAlgorithm >( lastIslands ) );
+	    obj->add( "lastIslandsCount", eoserial::makeArray< std::vector< size_t >, eoserial::MakeAlgorithm >( lastIslandsCount ) );
+	    obj->add( "lastFitnesses", eoserial::makeArray< std::vector< FitT >, eoserial::MakeAlgorithm >( lastFitnesses ) );
+	    // !DIM
+
 	    return obj;
 	}
+
+/* DIM */
+public:
+    void addIsland( size_t isl )
+    {
+	if ( getLastIsland() == int(isl) )
+	{
+	    ++lastIslandsCount.back();
+	}
+	else
+	{
+	    lastIslands.push_back( isl );
+	    lastIslandsCount.push_back( 0 );
+	}
+    }
+
+    void addFitness()
+    {
+	lastFitnesses.push_back( this->invalid() ? -1 : this->fitness() );
+    }
+
+    inline int getLastIsland() const { return lastIslands.empty() ? -1 : lastIslands.back(); }
+    inline int getLastIslandCount() const { return lastIslandsCount.empty() ? -1 : lastIslandsCount.back(); }
+    inline FitT getLastFitness() const { return lastFitnesses.empty() ? -1 : lastFitnesses.back(); }
+
+    inline const std::vector<size_t>& getLastIslands() const { return lastIslands; }
+    inline const std::vector<size_t>& getLastIslandsCount() const { return lastIslandsCount; }
+    inline const std::vector<FitT>& getLastFitnesses() const { return lastFitnesses; }
+
+    void printLastIslands() const
+    {
+	if (!lastIslands.size()) { return; }
+
+	if ( lastIslandsCount.back() > 0 )
+	{
+	    std::cout << "(" << lastIslands.back() << "," << lastIslandsCount.back() << ")";
+	}
+	else
+	{
+	    std::cout << lastIslands.back();
+	}
+	std::cout.flush();
+
+	for ( size_t i = lastIslands.size()-1; i > 0; --i )
+	    {
+		if ( lastIslandsCount[i-1] > 0 )
+		{
+		    std::cout << " < (" << lastIslands[i-1] << "," << lastIslandsCount[i-1] << ")";
+		}
+		else
+		{
+		    std::cout << " < " << lastIslands[i-1];
+		}
+		std::cout.flush();
+	    }
+	std::cout << std::endl;
+	std::cout.flush();
+    }
+
+    size_t getLastIslandsSize() const
+    {
+	return lastIslands.size();
+    }
+
+private:
+    std::vector< size_t > lastIslands;
+    std::vector< size_t > lastIslandsCount;
+    std::vector< FitT > lastFitnesses;
+/* !DIM */
+
 #endif // !WITH_MPI
+
+public:
+#if defined(WITH_MPI)// and defined(WITH_BOOST)
+	template<class Archive>
+	void serialize(Archive & ar, const unsigned int /*version*/)
+	{
+	    ar & boost::serialization::base_object< EO<FitT> >(*this);
+	    ar & boost::serialization::base_object< std::vector<GeneType> >(*this);
+	    ar & lastIslands & lastIslandsCount & lastFitnesses;
+	}
+#endif
 
 };
 /** @example t-eoVector.cpp
@@ -199,6 +314,10 @@ bool operator>(const eoVector<FitT, GeneType>& _eo1, const eoVector<FitT, GeneTy
 {
     return _eo1.operator>(_eo2);
 }
+
+#if defined(WITH_MPI)// and defined(WITH_BOOST)
+BOOST_SERIALIZATION_ASSUME_ABSTRACT(eoVector)
+#endif
 
 #endif
 
