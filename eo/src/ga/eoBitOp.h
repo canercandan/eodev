@@ -127,21 +127,21 @@ template<class Chrom> class eoDetSingleBitFlip: public eoMonOp<Chrom>
       // check for duplicate
       for (unsigned k=0; k<num_bit; k++)
         {
-	    unsigned temp;
+      	    unsigned temp;
 
-	    do
-		{
-		    temp = eo::rng.random( chrom.size() );
-		}
-	    while ( find( selected.begin(), selected.end(), temp ) != selected.end() );
+      	    do
+      		{
+      		    temp = eo::rng.random( chrom.size() );
+      		}
+      	    while ( find( selected.begin(), selected.end(), temp ) != selected.end() );
 
-	    selected.push_back(temp);
+      	    selected.push_back(temp);
         }
 
-	for ( size_t i = 0; i < selected.size(); ++i )
-	    {
-		chrom[i] = !chrom[i];
-	    }
+      	for ( size_t i = 0; i < selected.size(); ++i )
+      	    {
+      		chrom[ selected[i] ] = !chrom[ selected[i] ];
+      	    }
 
       return true;
     }
@@ -149,6 +149,39 @@ template<class Chrom> class eoDetSingleBitFlip: public eoMonOp<Chrom>
   unsigned num_bit;
 };
 
+template<class Chrom> class eoDetPermutBitFlip: public eoMonOp<Chrom>
+{
+ public:
+  /**
+   * (Default) Constructor.
+   * @param _num_bit The number of bits to change
+   * default is one - equivalent to eoOneBitFlip then
+   */
+  eoDetPermutBitFlip(const unsigned& _num_bit = 1): num_bit(_num_bit) {}
+
+  /// The class name.
+  virtual std::string className() const { return "eoDetSingleBitFlip"; }
+
+  /**
+   * Change num_bit bits.
+   * @param chrom The cromosome which one bit is going to be changed.
+   */
+  bool operator()(Chrom& chrom)
+    {
+      for (unsigned k=0; k<num_bit; k++)
+        {
+	    unsigned pos = eo::random( k, (unsigned)chrom.size() );
+	    bool tmp = chrom[pos];
+	    chrom[pos] = chrom[k];
+	    chrom[k] = tmp;
+	    chrom[k] = !chrom[k];
+	}
+
+      return true;
+    }
+ private:
+  unsigned num_bit;
+};
 
 /** eoBitMutation --> classical mutation
 \class eoBitMutation eoBitOp.h ga/eoBitOp.h
