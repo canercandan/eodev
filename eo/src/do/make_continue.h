@@ -88,8 +88,8 @@ eoContinue<Indi> & do_make_continue(eoParser& _parser, eoState& _state, eoEvalFu
       }
 
   // the steadyGen continue - only if user imput
-  eoValueParam<unsigned>& steadyGenParam = _parser.createParam(unsigned(100), "steadyGen", "Number of generations with no improvement",'s', "Stopping criterion");
-  eoValueParam<unsigned>& minGenParam = _parser.createParam(unsigned(0), "minGen", "Minimum number of generations",'g', "Stopping criterion");
+  eoValueParam<unsigned>& steadyGenParam = _parser.getORcreateParam(unsigned(100), "steadyGen", "Number of generations with no improvement",'s', "Stopping criterion");
+  eoValueParam<unsigned>& minGenParam = _parser.getORcreateParam(unsigned(0), "minGen", "Minimum number of generations",'g', "Stopping criterion");
     if (_parser.isItThere(steadyGenParam))
       {
         eoSteadyFitContinue<Indi> *steadyCont = new eoSteadyFitContinue<Indi>
@@ -129,7 +129,7 @@ eoContinue<Indi> & do_make_continue(eoParser& _parser, eoState& _state, eoEvalFu
     */
     // the target fitness
     eoFitContinue<Indi> *fitCont;
-    eoValueParam<double>& targetFitnessParam = _parser.createParam(double(0.0), "targetFitness", "Stop when fitness reaches",'T', "Stopping criterion");
+    eoValueParam<double>& targetFitnessParam = _parser.getORcreateParam(double(0.0), "targetFitness", "Stop when fitness reaches",'T', "Stopping criterion");
     if (_parser.isItThere(targetFitnessParam))
       {
         fitCont = new eoFitContinue<Indi>
@@ -143,7 +143,7 @@ eoContinue<Indi> & do_make_continue(eoParser& _parser, eoState& _state, eoEvalFu
 #ifndef _MSC_VER
     // the CtrlC interception (Linux only I'm afraid)
     eoCtrlCContinue<Indi> *ctrlCCont;
-    eoValueParam<bool>& ctrlCParam = _parser.createParam(false, "CtrlC", "Terminate current generation upon Ctrl C",'C', "Stopping criterion");
+    eoValueParam<bool>& ctrlCParam = _parser.getORcreateParam(false, "CtrlC", "Terminate current generation upon Ctrl C",'C', "Stopping criterion");
     if (ctrlCParam.value())
       {
         ctrlCCont = new eoCtrlCContinue<Indi>;
