@@ -22,6 +22,7 @@ int main(int argc, char **argv)
 {
     Node::init( argc, argv );
 
+    eoPop< Indi > pop;
 
     return 0;
 }
