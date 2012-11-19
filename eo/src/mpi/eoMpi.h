@@ -436,7 +436,7 @@ namespace eo
              *
              * JobStore is the highest layer which calls needDelete on its functors.
              */
-            ~JobStore()
+            virtual ~JobStore()
             {
                 if( _stf->needDelete() ) delete _stf;
                 if( _hrf->needDelete() ) delete _hrf;

@@ -47,6 +47,8 @@ namespace eo
          */
         struct AssignmentAlgorithm
         {
+	    virtual ~AssignmentAlgorithm(){}
+
             /**
              * @brief Gets the rank of an available worker, so as to send it a task.
              *
