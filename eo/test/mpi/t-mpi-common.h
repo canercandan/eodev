@@ -36,9 +36,13 @@ struct SerializableBase : public eoserial::Persistent
             eoserial::unpack( *obj, "value", _value );
         }
 
-        eoserial::Object* pack(void) const
+        eoserial::Object* pack( eoserial::Object* json = NULL ) const
         {
-            eoserial::Object* obj = new eoserial::Object;
+	    eoserial::Object* obj = json;
+	    if (NULL == obj)
+		{
+		    obj = new eoserial::Object;
+		}
             obj->add("value", eoserial::make( _value ) );
             return obj;
         }

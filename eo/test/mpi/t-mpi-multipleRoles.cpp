@@ -69,9 +69,13 @@ struct SerializableVector : public std::vector<T>, public eoserial::Persistent
         vector->deserialize< std::vector<T>, eoserial::Array::UnpackObjectAlgorithm >( *this );
     }
 
-    eoserial::Object* pack( void ) const
+    eoserial::Object* pack( eoserial::Object* json = NULL ) const
     {
-        eoserial::Object* obj = new eoserial::Object;
+	    eoserial::Object* obj = json;
+	    if (NULL == obj)
+		{
+		    obj = new eoserial::Object;
+		}
         obj->add("vector", eoserial::makeArray< std::vector<T>, eoserial::SerializablePushAlgorithm >( *this ) );
         return obj;
     }
