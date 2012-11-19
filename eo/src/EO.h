@@ -31,6 +31,20 @@
 #include <eoObject.h>      // eoObject
 #include <eoPersistent.h>  // eoPersistent
 
+#ifdef WITH_MPI
+// #ifdef WITH_BOOST
+#include <boost/mpi.hpp>
+
+#include <boost/archive/text_oarchive.hpp>
+#include <boost/archive/text_iarchive.hpp>
+
+#include <boost/serialization/vector.hpp>
+#include <boost/serialization/base_object.hpp>
+#include <boost/serialization/utility.hpp>
+#include <boost/serialization/assume_abstract.hpp>
+// #endif // !WITH_BOOST
+#endif // !WITH_MPI
+
 /**
     @defgroup Core Core components
 
@@ -61,6 +75,10 @@
 template<class F = double> class EO: public eoObject, public eoPersistent
 {
 public:
+#if defined(WITH_MPI) and defined(WITH_BOOST)
+        friend class boost::serialization::access;
+#endif
+
   typedef F Fitness;
 
   /** Default constructor.
@@ -165,8 +183,21 @@ public:
 private:
   Fitness repFitness;   // value of fitness for this chromosome
   bool invalidFitness;  // true if the value of fitness is invalid
+
+public:
+#if defined(WITH_MPI)// and defined(WITH_BOOST)
+    template<class Archive>
+    void serialize(Archive & ar, const unsigned int /*version*/)
+    {
+	ar & invalidFitness & repFitness;
+    }
+#endif
+
 };
 
+#if defined(WITH_MPI)// and defined(WITH_BOOST)
+BOOST_SERIALIZATION_ASSUME_ABSTRACT(EO)
+#endif
 
 #endif
 
