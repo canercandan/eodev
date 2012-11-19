@@ -135,6 +135,16 @@ namespace mpi
     };
 
     /**
+     * @brief Wrapper type for MPI_Request
+     */
+    typedef MPI_Request request;
+
+    /**
+     * @brief Type for a set of request
+     */
+    typedef std::vector< request > requests;
+
+    /**
      * @brief Main object, used to send / receive messages, get informations about the rank and the size of the world,
      * etc.
      */
@@ -147,7 +157,7 @@ namespace mpi
          *
          * @todo Allow the user to precise which MPI_Comm to use
          */
-        communicator( );
+        communicator(MPI_Comm _comm = MPI_COMM_WORLD);
 
         ~communicator();
 
@@ -160,6 +170,11 @@ namespace mpi
          * @brief Returns the size of the MPI cluster.
          */
         int size();
+
+        /**
+         * @brief Returns the handled MPI communicator.
+         */
+        MPI_Comm mpi_comm();
 
         /*
          * SEND / RECV INT
@@ -210,7 +225,7 @@ namespace mpi
          * @param tag MPI tag of message
          * @param n The integer to send
          */
-        status isend( int dest, int tag, int n );
+        requests isend( int dest, int tag, int n );
 
         /**
          * @brief Non-blocking method to send an integer to dest on default channel "commands".
@@ -218,7 +233,7 @@ namespace mpi
          * @param dest MPI rank of the receiver
          * @param n The integer to send
          */
-        status isend( int dest, int n );
+        requests isend( int dest, int n );
 
         /*
          * @brief Non-blocking method to receive an integer from src on channel "tag".
@@ -227,7 +242,7 @@ namespace mpi
          * @param tag MPI tag of message
          * @param n Where to save the received integer
          */
-        status irecv( int src, int tag, int& n );
+        requests irecv( int src, int tag, int& n );
 
         /*
          * @brief Non-blocking method to receive an integer from src on default channel "commands".
@@ -235,7 +250,7 @@ namespace mpi
          * @param src MPI rank of the sender
          * @param n Where to save the received integer
          */
-        status irecv( int src, int& n );
+        requests irecv( int src, int& n );
 
         /*
          * SEND / RECV BOOL
@@ -286,7 +301,7 @@ namespace mpi
          * @param tag MPI tag of message
          * @param b The boolean to send
          */
-        status isend( int dest, int tag, bool b );
+        requests isend( int dest, int tag, bool b );
 
         /**
          * @brief Non-blocking method to send a boolean to dest on default channel "commands".
@@ -294,7 +309,7 @@ namespace mpi
          * @param dest MPI rank of the receiver
          * @param b The boolean to send
          */
-        status isend( int dest, bool b );
+        requests isend( int dest, bool b );
 
         /*
          * @brief Non-blocking method to receive a boolean from src on channel "tag".
@@ -303,7 +318,7 @@ namespace mpi
          * @param tag MPI tag of message
          * @param b Where to save the received boolean
          */
-        status irecv( int src, int tag, bool& b );
+        requests irecv( int src, int tag, bool& b );
 
         /*
          * @brief Non-blocking method to receive a boolean from src on default channel "commands".
@@ -311,7 +326,7 @@ namespace mpi
          * @param src MPI rank of the sender
          * @param b Where to save the received boolean
          */
-        status irecv( int src, bool& b );
+        requests irecv( int src, bool& b );
 
         /*
          * SEND / RECV STRING
@@ -363,7 +378,7 @@ namespace mpi
          * @param tag MPI tag of message
          * @param str The std::string to send
          */
-        status isend( int dest, int tag, const std::string& str );
+        requests isend( int dest, int tag, const std::string& str );
 
         /**
          * @brief Non-blocking method to send a string to dest on default channel "commands".
@@ -371,7 +386,7 @@ namespace mpi
          * @param dest MPI rank of the receiver
          * @param str The std::string to send
          */
-        status isend( int dest, const std::string& str );
+        requests isend( int dest, const std::string& str );
 
         /*
          * @brief Non-blocking method to receive a string from src on channel "tag".
@@ -380,7 +395,7 @@ namespace mpi
          * @param tag MPI tag of message
          * @param std::string Where to save the received string
          */
-        status irecv( int src, int tag, std::string& str );
+        requests irecv( int src, int tag, std::string& str );
 
         /*
          * @brief Non-blocking method to receive a string from src on default channel "commands".
@@ -389,7 +404,7 @@ namespace mpi
          * @param tag MPI tag of message
          * @param std::string Where to save the received string
          */
-        status irecv( int src, std::string& str );
+        requests irecv( int src, std::string& str );
 
         /*
          * SEND / RECV Objects
@@ -529,7 +544,7 @@ namespace mpi
          * @param tag MPI tag of message
          * @param persistent The object to send (it must absolutely implement eoserial::Persistent)
          */
-        status isend( int dest, int tag, const eoserial::Persistent & persistent );
+        requests isend( int dest, int tag, const eoserial::Persistent & persistent );
 
         /**
          * @brief Non-blocking method to send an eoserial::Persistent to dest on default channel "commands".
@@ -537,7 +552,7 @@ namespace mpi
          * @param dest MPI rank of the receiver
          * @param persistent The object to send (it must absolutely implement eoserial::Persistent)
          */
-        status isend( int dest, const eoserial::Persistent & persistent );
+        requests isend( int dest, const eoserial::Persistent & persistent );
 
         /**
          * @brief Non-blocking method to send an array of eoserial::Persistent to dest on channel "tag".
@@ -549,7 +564,7 @@ namespace mpi
          * overflow!)
          */
         template< class T >
-        status isend( int dest, int tag, T* table, int size )
+        requests isend( int dest, int tag, T* table, int size )
         {
             // Puts all the values into an array
             eoserial::Array* array = new eoserial::Array;
@@ -579,7 +594,7 @@ namespace mpi
          * overflow!)
          */
         template< class T >
-        status isend( int dest, T* table, int size )
+        requests isend( int dest, T* table, int size )
         {
 	    return isend(dest, 0, table, size);
 	}
@@ -591,7 +606,7 @@ namespace mpi
          * @param tag MPI tag of message
          * @param persistent Where to unpack the serialized object?
          */
-        status irecv( int src, int tag, eoserial::Persistent & persistent );
+        requests irecv( int src, int tag, eoserial::Persistent & persistent );
 
         /*
          * @brief Non-blocking method to receive an eoserial::Persistent object from src on default channel "commands".
@@ -599,7 +614,7 @@ namespace mpi
          * @param src MPI rank of the sender
          * @param persistent Where to unpack the serialized object?
          */
-        status irecv( int src, eoserial::Persistent & persistent );
+        requests irecv( int src, eoserial::Persistent & persistent );
 
         /*
          * @brief Non-blocking method to receive an array of eoserial::Persistent from src on channel "tag".
@@ -612,11 +627,11 @@ namespace mpi
          * overflow!)
          */
         template< class T >
-        status irecv( int src, int tag, T* table, int size )
+        requests irecv( int src, int tag, T* table, int size )
         {
             // Receives the string which contains the object
             std::string asText;
-            status stat = irecv( src, tag, asText );
+            requests req = irecv( src, tag, asText );
 
             // Parses the object and retrieves the table
             eoserial::Object* obj = eoserial::Parser::parse( asText );
@@ -629,7 +644,7 @@ namespace mpi
             }
             delete obj;
 
-	    return stat;
+	    return req;
         }
 
         /*
@@ -642,7 +657,7 @@ namespace mpi
          * overflow!)
          */
         template< class T >
-        status irecv( int src, T* table, int size )
+        requests irecv( int src, T* table, int size )
         {
 	    return irecv(src, 0, table, size);
 	}
@@ -681,6 +696,9 @@ namespace mpi
          */
         void barrier();
 
+        protected:
+	    MPI_Comm _comm;
+
         private:
             int _rank;
             int _size;
@@ -701,6 +719,57 @@ namespace mpi
      * @todo Actually comm isn't used and broadcast is performed on the whole MPI_COMM_WORLD. TODO: Use comm instead
      */
     void broadcast( communicator & comm, int value, int root );
+
+
+    class topology : public communicator
+    {
+    public:
+	topology();
+	// virtual ~topology();
+    };
+
+
+    class graph_topology : public topology
+    {
+    public:
+	graph_topology( MPI_Comm comm = MPI_COMM_WORLD,
+			int nnode = /*COMM_WORLD.Get_size()*/ 0,
+			int nedge = /*COMM_WORLD.Get_size()*/ 0,
+			bool reorder = true );
+	// virtual ~graph_topology();
+
+	void print();
+	void test();
+
+	int neighbors_count(int rank);
+	int neighbors_count();
+
+	std::vector<int> to(int rank);
+	std::vector<int> to();
+	std::vector<int> from(int rank);
+	std::vector<int> from();
+
+    protected:
+	std::vector<int> _index;
+	std::vector<int> _edges;
+    };
+
+
+    class ring : public graph_topology
+    {
+    public:
+	ring(MPI_Comm comm = MPI_COMM_WORLD, int nnode = MPI::COMM_WORLD.Get_size(), bool reorder = true);
+	// virtual ~ring();
+    };
+
+
+    class complete : public graph_topology
+    {
+    public:
+	complete(MPI_Comm comm = MPI_COMM_WORLD, int nnode = MPI::COMM_WORLD.Get_size(), bool reorder = true);
+	// virtual ~complete();
+    };
+
 
     /**
      * @}

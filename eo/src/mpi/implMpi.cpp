@@ -19,6 +19,11 @@ Contact: http://eodev.sourceforge.net
 Authors:
     Benjamin Bouvier <benjamin.bouvier@gmail.com>
 */
+
+#include <iterator>
+#include <assert.h>
+#include <algorithm>
+
 # include "implMpi.h"
 
 namespace mpi
@@ -55,8 +60,10 @@ namespace mpi
 	_flag = flag;
     }
 
-    communicator::communicator( )
+    communicator::communicator(MPI_Comm comm /*= MPI_COMM_WORLD*/)
     {
+	_comm = comm;
+
         _rank = -1;
         _size = -1;
 
@@ -77,7 +84,7 @@ namespace mpi
     {
         if ( _rank == -1 )
         {
-            MPI_Comm_rank( MPI_COMM_WORLD, &_rank );
+            MPI_Comm_rank( _comm, &_rank );
         }
         return _rank;
     }
@@ -86,9 +93,14 @@ namespace mpi
     {
         if ( _size == -1 )
         {
-            MPI_Comm_size( MPI_COMM_WORLD, &_size );
+            MPI_Comm_size( _comm, &_size );
         }
         return _size;
+    }
+
+    MPI_Comm communicator::mpi_comm()
+    {
+        return _comm;
     }
 
     /*
@@ -96,7 +108,7 @@ namespace mpi
      */
     void communicator::send( int dest, int tag, int n )
     {
-        MPI_Send( &n, 1, MPI_INT, dest, tag, MPI_COMM_WORLD );
+        MPI_Send( &n, 1, MPI_INT, dest, tag, _comm );
     }
 
     void communicator::send( int dest, int n )
@@ -107,7 +119,7 @@ namespace mpi
     void communicator::recv( int src, int tag, int& n )
     {
         MPI_Status stat;
-        MPI_Recv( &n, 1, MPI_INT, src, tag, MPI_COMM_WORLD , &stat );
+        MPI_Recv( &n, 1, MPI_INT, src, tag, _comm , &stat );
     }
 
     void communicator::recv( int src, int& n )
@@ -118,33 +130,36 @@ namespace mpi
     /*
      * ISEND / IRECV INT
      */
-    status communicator::isend( int dest, int tag, int n )
+    requests communicator::isend( int dest, int tag, int n )
     {
-	MPI_Request request;
-        MPI_Isend( &n, 1, MPI_INT, dest, tag, MPI_COMM_WORLD, &request );
-	// request.Get_status();
+	MPI_Request req;
+        MPI_Isend( &n, 1, MPI_INT, dest, tag, _comm, &req );
 	int flag;
 	MPI_Status stat;
-	MPI_Request_get_status( request, &flag, &stat );
-	return status( stat, flag );
+	MPI_Request_get_status( req, &flag, &stat );
+	requests reqs;
+	reqs.push_back(req);
+	return reqs;
     }
 
-    status communicator::isend( int dest, int n )
+    requests communicator::isend( int dest, int n )
     {
 	return isend(dest, 0, n);
     }
 
-    status communicator::irecv( int src, int tag, int& n )
+    requests communicator::irecv( int src, int tag, int& n )
     {
-	MPI_Request request;
-        MPI_Irecv( &n, 1, MPI_INT, src, tag, MPI_COMM_WORLD , &request );
+	MPI_Request req;
+        MPI_Irecv( &n, 1, MPI_INT, src, tag, _comm , &req );
 	int flag;
 	MPI_Status stat;
-	MPI_Request_get_status( request, &flag, &stat );
-	return status( stat, flag );
+	MPI_Request_get_status( req, &flag, &stat );
+	requests reqs;
+	reqs.push_back(req);
+	return reqs;
     }
 
-    status communicator::irecv( int src, int& n )
+    requests communicator::irecv( int src, int& n )
     {
 	return irecv(src, 0, n);
     }
@@ -154,7 +169,7 @@ namespace mpi
      */
     void communicator::send( int dest, int tag, bool b )
     {
-        MPI_Send( &b, 1, MPI::BOOL, dest, tag, MPI_COMM_WORLD );
+        MPI_Send( &b, 1, MPI::BOOL, dest, tag, _comm );
     }
 
     void communicator::send( int dest, bool b )
@@ -165,7 +180,7 @@ namespace mpi
     void communicator::recv( int src, int tag, bool& b )
     {
         MPI_Status stat;
-        MPI_Recv( &b, 1, MPI::BOOL, src, tag, MPI_COMM_WORLD , &stat );
+        MPI_Recv( &b, 1, MPI::BOOL, src, tag, _comm , &stat );
     }
 
     void communicator::recv( int src, bool& b )
@@ -176,30 +191,36 @@ namespace mpi
     /*
      * ISEND / IRECV BOOL
      */
-    status communicator::isend( int dest, int tag, bool b )
+    requests communicator::isend( int dest, int tag, bool b )
     {
-	MPI_Request request;
-        MPI_Isend( &b, 1, MPI::BOOL, dest, tag, MPI_COMM_WORLD, &request );
+	MPI_Request req;
+        MPI_Isend( &b, 1, MPI::BOOL, dest, tag, _comm, &req );
 	int flag;
 	MPI_Status stat;
-	MPI_Request_get_status( request, &flag, &stat );
-	return status( stat, flag );    }
+	MPI_Request_get_status( req, &flag, &stat );
+	requests reqs;
+	reqs.push_back(req);
+	return reqs;
+    }
 
-    status communicator::isend( int dest, bool b )
+    requests communicator::isend( int dest, bool b )
     {
 	return isend(dest, 0, b);
     }
 
-    status communicator::irecv( int src, int tag, bool& b )
+    requests communicator::irecv( int src, int tag, bool& b )
     {
-        MPI_Request request;
-        MPI_Irecv( &b, 1, MPI::BOOL, src, tag, MPI_COMM_WORLD, &request );
+        MPI_Request req;
+        MPI_Irecv( &b, 1, MPI::BOOL, src, tag, _comm, &req );
 	int flag;
 	MPI_Status stat;
-	MPI_Request_get_status( request, &flag, &stat );
-	return status( stat, flag );    }
+	MPI_Request_get_status( req, &flag, &stat );
+	requests reqs;
+	reqs.push_back(req);
+	return reqs;
+    }
 
-    status communicator::irecv( int src, bool& b )
+    requests communicator::irecv( int src, bool& b )
     {
 	return irecv(src, 0, b);
     }
@@ -211,7 +232,7 @@ namespace mpi
     {
         int size = str.size() + 1;
         send( dest, tag, size );
-        MPI_Send( (char*)str.c_str(), size, MPI_CHAR, dest, tag, MPI_COMM_WORLD);
+        MPI_Send( (char*)str.c_str(), size, MPI_CHAR, dest, tag, _comm);
     }
 
     void communicator::send( int dest, const std::string& str )
@@ -235,7 +256,7 @@ namespace mpi
             _buf = new char[ size ];
             _bufsize = size;
         }
-        MPI_Recv( _buf, size, MPI_CHAR, src, tag, MPI_COMM_WORLD, &stat );
+        MPI_Recv( _buf, size, MPI_CHAR, src, tag, _comm, &stat );
         str.assign( _buf );
     }
 
@@ -247,27 +268,38 @@ namespace mpi
     /*
      * ISEND / IRECV STRING
      */
-    status communicator::isend( int dest, int tag, const std::string& str )
+    requests communicator::isend( int dest, int tag, const std::string& str )
     {
         int size = str.size() + 1;
-        isend( dest, tag, size );
-	MPI_Request request;
-        MPI_Isend( (char*)str.c_str(), size, MPI_CHAR, dest, tag, MPI_COMM_WORLD, &request);
+	int pos = 0;
+	std::vector< char > buf( size, 0 );
+
+	MPI_Pack( &size, 1, MPI_INT, buf.data(), buf.size(), &pos, _comm );
+	buf.resize(size + pos);
+
+	MPI_Pack( (char*)str.c_str(), size, MPI_CHAR, buf.data(), buf.size(), &pos, _comm );
+
+	MPI_Request req;
+        MPI_Isend( (char*)buf.data(), pos, MPI_PACKED, dest, tag, _comm, &req);
+
 	int flag;
 	MPI_Status stat;
-	MPI_Request_get_status( request, &flag, &stat );
-	return status( stat, flag );
+	MPI_Request_get_status( req, &flag, &stat );
+
+	requests reqs;
+	reqs.push_back(req);
+	return reqs;
     }
 
-    status communicator::isend( int dest, const std::string& str )
+    requests communicator::isend( int dest, const std::string& str )
     {
 	return isend(dest, 0, str);
     }
 
-    status communicator::irecv( int src, int tag, std::string& str )
+    requests communicator::irecv( int src, int tag, std::string& str )
     {
         int size = -1;
-        irecv( src, tag, size );
+        requests reqs = irecv( src, tag, size );
 
         if( _buf == 0 )
         {
@@ -279,16 +311,19 @@ namespace mpi
             _buf = new char[ size ];
             _bufsize = size;
         }
-	MPI_Request request;
-        MPI_Irecv( _buf, size, MPI_CHAR, src, tag, MPI_COMM_WORLD, &request );
+
+	MPI_Request req;
+        MPI_Irecv( _buf, size, MPI_CHAR, src, tag, _comm, &req );
+
         str.assign( _buf );
 	int flag;
 	MPI_Status stat;
-	MPI_Request_get_status( request, &flag, &stat );
-	return status( stat, flag );
+	MPI_Request_get_status( req, &flag, &stat );
+	reqs.push_back(req);
+	return reqs;
     }
 
-    status communicator::irecv( int src, std::string& str )
+    requests communicator::irecv( int src, std::string& str )
     {
 	return irecv(src, 0, str);
     }
@@ -327,7 +362,7 @@ namespace mpi
     /*
      * ISEND / IRECV Objects
      */
-    status communicator::isend( int dest, int tag, const eoserial::Persistent & persistent )
+    requests communicator::isend( int dest, int tag, const eoserial::Persistent & persistent )
     {
         eoserial::Object* obj = persistent.pack();
         std::stringstream ss;
@@ -336,22 +371,22 @@ namespace mpi
         return isend( dest, tag, ss.str() );
     }
 
-    status communicator::isend( int dest, const eoserial::Persistent & persistent )
+    requests communicator::isend( int dest, const eoserial::Persistent & persistent )
     {
 	return isend(dest, 0, persistent);
     }
 
-    status communicator::irecv( int src, int tag, eoserial::Persistent & persistent )
+    requests communicator::irecv( int src, int tag, eoserial::Persistent & persistent )
     {
         std::string asText;
-        status stat = irecv( src, tag, asText );
+        requests req = irecv( src, tag, asText );
         eoserial::Object* obj = eoserial::Parser::parse( asText );
         persistent.unpack( obj );
         delete obj;
-	return stat;
+	return req;
     }
 
-    status communicator::irecv( int src, eoserial::Persistent & persistent )
+    requests communicator::irecv( int src, eoserial::Persistent & persistent )
     {
 	return irecv(src, 0, persistent);
     }
@@ -362,7 +397,7 @@ namespace mpi
     status communicator::probe( int src, int tag )
     {
         MPI_Status stat;
-        MPI_Probe( src, tag, MPI_COMM_WORLD , &stat );
+        MPI_Probe( src, tag, _comm , &stat );
         return status( stat );
     }
 
@@ -370,17 +405,114 @@ namespace mpi
     {
 	int flag;
         MPI_Status stat;
-        MPI_Iprobe( src, tag, MPI_COMM_WORLD , &flag, &stat );
+        MPI_Iprobe( src, tag, _comm , &flag, &stat );
         return status( stat, flag );
     }
 
     void communicator::barrier()
     {
-        MPI_Barrier( MPI_COMM_WORLD );
+        MPI_Barrier( _comm );
     }
 
     void broadcast( communicator & comm, int value, int root )
     {
-        MPI_Bcast( &value, 1, MPI_INT, root, MPI_COMM_WORLD );
+        MPI_Bcast( &value, 1, MPI_INT, root, comm.mpi_comm() );
+    }
+
+    topology::topology() {}
+
+    graph_topology::graph_topology( MPI_Comm comm /*= MPI_COMM_WORLD*/,
+				    int nnode /*= COMM_WORLD.Get_size()*/,
+				    int nedge /*= COMM_WORLD.Get_size()*/,
+				    bool reorder /*= true*/ )
+	: _index(nnode), _edges(nedge)
+    {}
+
+    void graph_topology::print()
+    {
+	std::copy(_index.begin(), _index.end(), std::ostream_iterator< int >(std::cout, " "));
+	std::copy(_edges.begin(), _edges.end(), std::ostream_iterator< int >(std::cout, " "));
+	std::cout << std::endl;
+    }
+
+    void graph_topology::test()
+    {
+	int top_type;
+	MPI_Topo_test( _comm, &top_type );
+	assert( top_type == MPI_GRAPH );
+    }
+
+    int graph_topology::neighbors_count(int rank)
+    {
+	int nneighbors;
+	MPI_Graph_neighbors_count(_comm, rank, &nneighbors);
+	return nneighbors;
+    }
+
+    int graph_topology::neighbors_count()
+    {
+	return neighbors_count(rank());
+    }
+
+    std::vector<int> graph_topology::to(int rank)
+    {
+	const size_t size = neighbors_count(rank);
+	std::vector<int> neighbors(size);
+	MPI_Graph_neighbors( _comm, rank, size, neighbors.data() );
+	return neighbors;
+    }
+
+    std::vector<int> graph_topology::to()
+    {
+	return to(rank());
+    }
+
+    std::vector<int> graph_topology::from(int rank)
+    {
+	std::vector<int> vfrom;
+
+	for (int i = 0; i < size(); ++i)
+	    {
+		std::vector<int> v = to(i);
+		if ( find(v.begin(), v.end(), rank) != v.end() )
+		    {
+			vfrom.push_back(i);
+		    }
+	    }
+
+	return vfrom;
+    }
+
+    std::vector<int> graph_topology::from()
+    {
+	return from(rank());
+    }
+
+    ring::ring(MPI_Comm comm /*= MPI_COMM_WORLD*/, int nnode /*= MPI::COMM_WORLD.Get_size()*/, bool reorder /*= true*/)
+	: graph_topology(comm, nnode, nnode, reorder)
+    {
+	for (int i = 0; i < nnode; ++i)
+	    {
+		_index[i] = i+1;
+		_edges[i] = (i+1) % nnode;
+	    }
+
+	MPI_Graph_create(comm, nnode, _index.data(), _edges.data(), reorder, &_comm);
+    }
+
+    complete::complete(MPI_Comm comm /*= MPI_COMM_WORLD*/, int nnode /*= MPI::COMM_WORLD.Get_size()*/, bool reorder /*= true*/)
+	: graph_topology(comm, nnode, nnode*nnode, reorder)
+    {
+	for (int i = 0; i < nnode; ++i)
+	    {
+		_index[i] = (i+1) * nnode;
+
+		for (int j = 0; j < nnode; ++j)
+		    {
+			_edges[ j + (i*nnode) ] = j;
+		    }
+	    }
+
+	MPI_Graph_create(comm, nnode, _index.data(), _edges.data(), reorder, &_comm);
     }
 }
