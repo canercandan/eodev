@@ -69,14 +69,14 @@ void make_help(eoParser & _parser)
 #ifdef WITH_MPI
 	  if ( eo::mpi::Node::comm().rank() )
 	  {
-	      exit(1);
+	      exit(0);
 	  }
 #endif // !WITH_MPI
 
         _parser.printHelp(cout);
         cout << "You can use an edited copy of file " << statusParam.value()
              << " as parameter file" << endl;
-        exit(1);
+        exit(0);
       }
 }
 
