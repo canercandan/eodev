@@ -1,11 +1,19 @@
 #!/usr/bin/env python3
 
+import sys
+
 if __name__ == '__main__':
+    if len(sys.args) < 2:
+        print("Usage: %s MONITOR_PREFIX_NAME")
+        sys.exit()
+
+    prefix = sys.argv[1]
+
     files = []
     for i in range(4):
-        files += [open("monitor.csv.%d" % i, 'r')]
+        files += [open("%d_monitor_%d" % (prefix, i), 'r')]
 
-    newfile = open("monitor.csv", 'w')
+    newfile = open("%s_monitor" % prefix, 'w')
 
     newfile.write("""# Command line : ../OneMax -B 1000 --seed 1 --Ver 2 --Ind 25 --Mig 10000 --Bet 0.99 --Alp 0.8 --MvLS 1 --IdG 100 --InitG 1 --Isl 4 --LSF ../../OpFiles/LSop4.txt --Upd 0 --GB 1 
 # Instance 1000 loaded
@@ -101,4 +109,3 @@ if __name__ == '__main__':
         newfile.write('\n')
 
     print("Done")
-
