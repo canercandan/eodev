@@ -393,6 +393,7 @@ int main(int argc, char *argv[])
     bool initG = parser.createParam(bool(true), "initG", "initG", 'I', "Islands Model").value();
 
     bool printBest = parser.createParam(false, "printBestStat", "Print Best/avg/stdev every gen.", '\0', "Output").value();
+    string monitorPrefix = parser.createParam(string("result"), "monitorPrefix", "Monitor prefix filenames", '\0', "Output").value();
 
     /****************************
      * Il faut au moins 4 nœuds *
@@ -541,7 +542,7 @@ int main(int argc, char *argv[])
      ***************************************/
 
     std::ostringstream ss;
-    ss << "monitor.csv." << GRANK;
+    ss << monitorPrefix << "_monitor_" << GRANK;
     eoFileMonitor& fileMonitor = state.storeFunctor( new eoFileMonitor( ss.str(), " ", false, true ) );
     checkpoint.add(fileMonitor);
 
