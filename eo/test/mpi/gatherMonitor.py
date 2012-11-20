@@ -3,7 +3,7 @@
 import sys
 
 if __name__ == '__main__':
-    if len(sys.args) < 2:
+    if len(sys.argv) < 2:
         print("Usage: %s MONITOR_PREFIX_NAME")
         sys.exit()
 
@@ -11,7 +11,7 @@ if __name__ == '__main__':
 
     files = []
     for i in range(4):
-        files += [open("%d_monitor_%d" % (prefix, i), 'r')]
+        files += [open("%s_monitor_%d" % (prefix, i), 'r')]
 
     newfile = open("%s_monitor" % prefix, 'w')
 
