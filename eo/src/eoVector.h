@@ -24,6 +24,7 @@ Old contact: todos@geneura.ugr.es, http://geneura.ugr.es
 #define _eoVector_h
 
 #include <vector>
+#include <list>
 #include <iterator>
 #include <EO.h>
 #include <utils/eoLogger.h>
@@ -38,6 +39,7 @@ Old contact: todos@geneura.ugr.es, http://geneura.ugr.es
 #include <boost/archive/text_iarchive.hpp>
 
 #include <boost/serialization/vector.hpp>
+#include <boost/serialization/list.hpp>
 #include <boost/serialization/base_object.hpp>
 #include <boost/serialization/utility.hpp>
 #include <boost/serialization/assume_abstract.hpp>
@@ -172,12 +174,10 @@ public:
 		}
 
 	    // DIM
-	    lastIslands.clear();
-	    eoserial::unpackArray< std::vector< size_t >, eoserial::Array::UnpackAlgorithm >( *obj, "lastIslands", lastIslands );
-	    lastIslandsCount.clear();
-	    eoserial::unpackArray< std::vector< size_t >, eoserial::Array::UnpackAlgorithm >( *obj, "lastIslandsCount", lastIslandsCount );
-	    lastFitnesses.clear();
-	    eoserial::unpackArray< std::vector< FitT >, eoserial::Array::UnpackAlgorithm >( *obj, "lastFitnesses", lastFitnesses );
+	    // lastIslands.clear();
+	    // eoserial::unpackArray< std::list< std::pair< size_t, size_t > >, eoserial::Array::UnpackAlgorithm >( *obj, "lastIslands", lastIslands );
+	    // lastFitnesses.clear();
+	    // eoserial::unpackArray< std::list< FitT >, eoserial::Array::UnpackAlgorithm >( *obj, "lastFitnesses", lastFitnesses );
 	    // !DIM
 	}
 
@@ -198,9 +198,8 @@ public:
 		}
 
 	    // DIM
-	    obj->add( "lastIslands", eoserial::makeArray< std::vector< size_t >, eoserial::MakeAlgorithm >( lastIslands ) );
-	    obj->add( "lastIslandsCount", eoserial::makeArray< std::vector< size_t >, eoserial::MakeAlgorithm >( lastIslandsCount ) );
-	    obj->add( "lastFitnesses", eoserial::makeArray< std::vector< FitT >, eoserial::MakeAlgorithm >( lastFitnesses ) );
+	    // obj->add( "lastIslands", eoserial::makeArray< std::list< std::pair< size_t, size_t > >, eoserial::MakeAlgorithm >( lastIslands ) );
+	    // obj->add( "lastFitnesses", eoserial::makeArray< std::list< FitT >, eoserial::MakeAlgorithm >( lastFitnesses ) );
 	    // !DIM
 
 	    return obj;
@@ -212,12 +211,20 @@ public:
     {
 	if ( getLastIsland() == int(isl) )
 	{
-	    ++lastIslandsCount.back();
+	    ++(lastIslands.back().first);
 	}
 	else
 	{
-	    lastIslands.push_back( isl );
-	    lastIslandsCount.push_back( 0 );
+	    lastIslands.push_back( std::make_pair( 0, isl ) );
+	}
+
+	if (!historySize) { return; }
+
+	// check if we overtake the history size
+	while (lastIslands.size() > historySize)
+	{
+	    lastIslands.pop_front();
+	    lastFitnesses.pop_front();
 	}
     }
 
@@ -226,53 +233,58 @@ public:
 	lastFitnesses.push_back( this->invalid() ? -1 : this->fitness() );
     }
 
-    inline int getLastIsland() const { return lastIslands.empty() ? -1 : lastIslands.back(); }
-    inline int getLastIslandCount() const { return lastIslandsCount.empty() ? -1 : lastIslandsCount.back(); }
+    inline int getLastIsland() const { return lastIslands.empty() ? -1 : lastIslands.back().second; }
+    inline int getLastIslandCount() const { return lastIslands.empty() ? -1 : lastIslands.back().first; }
     inline FitT getLastFitness() const { return lastFitnesses.empty() ? -1 : lastFitnesses.back(); }
 
-    inline const std::vector<size_t>& getLastIslands() const { return lastIslands; }
-    inline const std::vector<size_t>& getLastIslandsCount() const { return lastIslandsCount; }
-    inline const std::vector<FitT>& getLastFitnesses() const { return lastFitnesses; }
+    inline const std::list< std::pair< size_t, size_t > >& getLastIslands() const { return lastIslands; }
+    inline const std::list<FitT>& getLastFitnesses() const { return lastFitnesses; }
 
     void printLastIslands() const
     {
 	if (!lastIslands.size()) { return; }
 
-	if ( lastIslandsCount.back() > 0 )
+	size_t count = lastIslands.back().first;
+	size_t last = lastIslands.back().second;
+
+	if ( count > 0 )
 	{
-	    std::cout << "(" << lastIslands.back() << "," << lastIslandsCount.back() << ")";
+	    std::cout << "(" << last << "," << count << ")";
 	}
 	else
 	{
-	    std::cout << lastIslands.back();
+	    std::cout << last;
 	}
 	std::cout.flush();
 
-	for ( size_t i = lastIslands.size()-1; i > 0; --i )
+	size_t i = 0;
+	for (auto it = lastIslands.crbegin(); it != lastIslands.crend(); ++it, ++i)
+	{
+	    size_t count = it->first;
+	    size_t last = it->second;
+	    if ( i > 0 )
 	    {
-		if ( lastIslandsCount[i-1] > 0 )
-		{
-		    std::cout << " < (" << lastIslands[i-1] << "," << lastIslandsCount[i-1] << ")";
-		}
-		else
-		{
-		    std::cout << " < " << lastIslands[i-1];
-		}
-		std::cout.flush();
+		std::cout << " < (" << last << "," << count << ")";
 	    }
+	    else
+	    {
+		std::cout << " < " << last;
+	    }
+	    std::cout.flush();
+	}
 	std::cout << std::endl;
 	std::cout.flush();
     }
 
-    size_t getLastIslandsSize() const
-    {
-	return lastIslands.size();
-    }
+    inline size_t getLastIslandsSize() const {return lastIslands.size();}
+
+    inline void setHistorySize(size_t size) { historySize = size; }
+    inline size_t getHistorySize(size_t size) const { return historySize; }
 
 private:
-    std::vector< size_t > lastIslands;
-    std::vector< size_t > lastIslandsCount;
-    std::vector< FitT > lastFitnesses;
+    size_t historySize = 1;
+    std::list< std::pair< size_t, size_t > > lastIslands;
+    std::list< FitT > lastFitnesses;
 /* !DIM */
 
 #endif // !WITH_MPI
@@ -284,7 +296,7 @@ public:
 	{
 	    ar & boost::serialization::base_object< EO<FitT> >(*this);
 	    ar & boost::serialization::base_object< std::vector<GeneType> >(*this);
-	    ar & lastIslands & lastIslandsCount & lastFitnesses;
+	    ar & lastIslands & lastFitnesses;
 	}
 #endif
 
