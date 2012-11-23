@@ -16,29 +16,61 @@
 #include <algorithm>
 #include <assert.h>
 
+#include <condition_variable>
 #include <thread>
 #include <mutex>
 #include <atomic>
 #include <queue>
+#include <chrono>
 
 #include <eo>
 #include <ga.h>
 #include <ga/make_ga.h>
 #include <utils/eoFuncPtrStat.h>
+#include <do/make_continue.h>
 
-#include <eval/oneMaxEval.h>
+// #include <eval/oneMaxEval.h>
 
 #include "t-mpi-common.h"
 
 #include "make_ls_op.h"
 #include "LocalSearch.h"
 #include "make_checkpoint_ga.h"
+#include "eoEasyEA.h"
+#include "make_algo_scalar.h"
 
 using namespace std;
+
+#include "nkLandscapesEval.h"
+
 using namespace eo::mpi;
 using namespace MPI;
 using namespace boost::mpi;
 using namespace boost;
+
+namespace my
+{
+
+template< class EOT >
+class OneMaxEval : public eoEvalFunc<EOT>
+{
+public:
+
+	/**
+	 * Count the number of 1 in a bitString
+	 * @param _sol the solution to evaluate
+	 */
+    void operator() (EOT& _sol) {
+        unsigned int sum = 0;
+        for (unsigned int i = 0; i < _sol.size(); i++)
+            sum += _sol[i];
+	// if (!_sol.invalid() && sum < _sol.fitness())
+	//     return;
+	_sol.fitness(sum);
+    }
+};
+
+}
 
 template < typename Atom >
 class SquareMatrix : public std::vector< Atom >, public eoObject, public eoPersistent
@@ -258,6 +290,26 @@ private:
     const size_t _isl;
 };
 
+class GetMigrationProbabilityRet : public eoUpdater, public eoValueParam<double>
+{
+public:
+    GetMigrationProbabilityRet( const vector< double >& vecProbaRet, std::string label = "Value" )
+	: eoValueParam<double>(0, label), _vecProbaRet(vecProbaRet) {}
+
+    virtual void operator()()
+    {
+	value() = 0;
+	for (size_t i = 0; i < _vecProbaRet.size(); ++i)
+	    {
+		value() = value() + _vecProbaRet[i];
+	    }
+	value() = value() / 10;
+    }
+
+private:
+    const vector< double >& _vecProbaRet;
+};
+
 class GetSumVectorProbability : public eoUpdater, public eoValueParam<double>
 {
 public:
@@ -345,6 +397,7 @@ int main(int argc, char *argv[])
     bool initG = parser.createParam(bool(true), "initG", "initG", 'I', "Islands Model").value();
 
     bool printBest = parser.createParam(false, "printBestStat", "Print Best/avg/stdev every gen.", '\0', "Output").value();
+    string monitorPrefix = parser.createParam(string("result"), "monitorPrefix", "Monitor prefix filenames", '\0', "Output").value();
 
     /****************************
      * Il faut au moins 4 nœuds *
@@ -366,32 +419,60 @@ int main(int argc, char *argv[])
      * Déclaration des composants EO *
      *********************************/
 
-    unsigned chromSize = parser.getORcreateParam(unsigned(1500), "chromSize", "The length of the bitstrings", 'n',"Problem").value();
+    unsigned chromSize = parser.getORcreateParam(unsigned(1000), "chromSize", "The length of the bitstrings", 'n',"Problem").value();
     eoInit<EOT>& init = make_genotype(parser, state, EOT(), 0);
 
-    oneMaxEval<EOT> mainEval;
+    string nklInstance =  parser.getORcreateParam(string(), "nklInstance", "filename of the instance for NK-L problem", 0, "Problem").value();
+
+    // my::OneMaxEval<EOT> mainEval;
+    my::nkLandscapesEval<EOT> mainEval;
     eoEvalFuncCounter<EOT> eval(mainEval);
 
-    unsigned popSize = parser.getORcreateParam(unsigned(100), "popSize", "Population Size", 'P', "Evolution Engine").value();
+    /*unsigned popSize = */parser.getORcreateParam(unsigned(100), "popSize", "Population Size", 'P', "Evolution Engine")/*.value()*/;
     eoPop<EOT>& pop = make_pop(parser, state, init);
 
-    parser.getORcreateParam(unsigned(10000), "maxGen", "Maximum number of generations () = none)",'G',"Stopping criterion");
+    eoCombinedContinue<EOT> *continuator = NULL;
+
+    unsigned maxGen = parser.getORcreateParam(unsigned(10000), "maxGen", "Maximum number of generations () = none)",'G',"Stopping criterion").value();
+    if (maxGen) // positive: -> define and store
+	{
+	    eoGenContinue<EOT> *genCont = new eoGenContinue<EOT>(maxGen);
+	    state.storeFunctor(genCont);
+	    // and "add" to combined
+	    continuator = make_combinedContinue<EOT>(continuator, genCont);
+	}
+
+    eoFitContinue<EOT> *fitCont;
     double targetFitness = parser.getORcreateParam(double(chromSize), "targetFitness", "Stop when fitness reaches",'T', "Stopping criterion").value();
-    eoContinue<EOT>& term = make_continue(parser, state, eval);
+    if (targetFitness)
+	{
+	    fitCont = new eoFitContinue<EOT>(targetFitness);
+	    // store
+	    state.storeFunctor(fitCont);
+	    // add to combinedContinue
+	    // continuator = make_combinedContinue<EOT>(continuator, fitCont);
+	}
 
-    eoCheckPoint<EOT>& checkpoint = state.storeFunctor( new eoCheckPoint<EOT>( term ) );
+    if (!continuator)
+	throw std::runtime_error("You MUST provide a stopping criterion");
+    // OK, it's there: store in the eoState
+    state.storeFunctor(continuator);
 
-    eoGenContinue<EOT> algo_cont( 1 ); // just for algo
+    // eoContinue<EOT>& term = make_continue(parser, state, eval);
 
-    const int GALL = world.size();
-    const int GRANK = world.rank();
+    eoCheckPoint<EOT>& checkpoint = state.storeFunctor( new eoCheckPoint<EOT>( *continuator ) );
+
+    // eoGenContinue<EOT> algo_cont( 1 ); // just for algo
+
+    const size_t GALL = world.size();
+    const size_t GRANK = world.rank();
 
     /****************************************
      * Distribution des opérateurs aux iles *
      ****************************************/
 
-    unsigned nbMove = parser.getORcreateParam(unsigned(1), "nbMove", "Number of move allowed for local search",'N',"Local search").value();
-    my::LocalSearch<EOT> seqOp(nbMove);
+    // unsigned nbMove = parser.getORcreateParam(unsigned(1), "nbMove", "Number of move allowed for local search",'N',"Local search").value();
+    // my::LocalSearch<EOT> seqOp(nbMove);
 
     eoMonOp<EOT>* ptMon = NULL;
     if ( GRANK == 0 )
@@ -402,22 +483,22 @@ int main(int argc, char *argv[])
     else
 	{
 	    eo::log << eo::logging << GRANK << ": kflip(" << (GRANK-1) * 2 + 1 << ") ";
-	    ptMon = new eoDetBitFlip<EOT>( (GRANK-1) * 2 + 1 );
+	    ptMon = new eoDetPermutBitFlip<EOT>( (GRANK-1) * 2 + 1 );
 	}
     eo::log << eo::logging << endl;
     eo::log.flush();
     state.storeFunctor(ptMon);
-    seqOp.add(*ptMon, 1);
+    // seqOp.add(*ptMon, 1);
 
     /********************************
      * Initialize generic algorithm *
      ********************************/
 
-    string comment = "Selection: DetTour(T), StochTour(t), Roulette, Ranking(p,e) or Sequential(ordered/unordered)";
-    parser.getORcreateParam(eoParamParamType("DetTour(20)"), "selection", comment, 'S', "Evolution Engine");
-    parser.getORcreateParam(eoParamParamType("Plus"), "replacement", "Replacement: Comma, Plus or EPTour(T), SSGAWorst, SSGADet(T), SSGAStoch(t)", 'R', "Evolution Engine");
+    // string comment = "Selection: DetTour(T), StochTour(t), Roulette, Ranking(p,e) or Sequential(ordered/unordered)";
+    // parser.getORcreateParam(eoParamParamType("DetTour(100)"), "selection", comment, 'S', "Evolution Engine");
+    // parser.getORcreateParam(eoParamParamType("Plus"), "replacement", "Replacement: Comma, Plus or EPTour(T), SSGAWorst, SSGADet(T), SSGAStoch(t)", 'R', "Evolution Engine");
 
-    eoAlgo<EOT>& ga = make_algo_scalar(parser, state, eval, algo_cont, seqOp);
+    // eoAlgo<EOT>& ga = my::make_algo_scalar(parser, state, eval, algo_cont, seqOp);
 
     /**************
      * EO routine *
@@ -427,6 +508,8 @@ int main(int argc, char *argv[])
     make_verbose(parser);
     make_help(parser);
 
+    mainEval.load(nklInstance.c_str()); // nklandscapeseval specific
+
     /******************************************************************************
      * Création de la matrice de transition et distribution aux iles des vecteurs *
      ******************************************************************************/
@@ -434,30 +517,42 @@ int main(int argc, char *argv[])
     MigrationMatrix probabilities( GALL );
     InitMatrix initmatrix( initG, probaSame );
     vector< double > vecProba( GALL );
+    vector< double > vecProbaRet( GALL );
 
     if ( 0 == GRANK )
     	{
 	    initmatrix( probabilities );
     	    cout << probabilities;
 	    vecProba = probabilities(GRANK);
-
-	    for (int i = 1; i < GALL; ++i)
+	    for (size_t j = 0; j < GALL; ++j)
 		{
-		    world.send( i, 0, probabilities(i) );
+		    vecProbaRet[j] = probabilities(j,GRANK);
+		}
+
+	    for (size_t i = 1; i < GALL; ++i)
+		{
+		    world.send( i, 100, probabilities(i) );
+		    vector< double > vecProbaRetIsl( GALL );
+		    for (size_t j = 0; j < GALL; ++j)
+			{
+			    vecProbaRetIsl[j] = probabilities(j,i);
+			}
+		    world.send( i, 101, vecProbaRetIsl );
 		}
     	}
     else
 	{
-	    world.recv( 0, 0, vecProba );
+	    world.recv( 0, 100, vecProba );
+	    world.recv( 0, 101, vecProbaRet );
 	}
 
     /***************************************
      * Déclaration des opérateurs de stats *
      ***************************************/
 
-    std::ostringstream ss;
-    ss << "monitor.csv." << GRANK;
-    eoFileMonitor& fileMonitor = state.storeFunctor( new eoFileMonitor( ss.str(), " ", false, true ) );
+    std::ostringstream ss_prefix;
+    ss_prefix << monitorPrefix << "_monitor_" << GRANK;
+    eoFileMonitor& fileMonitor = state.storeFunctor( new eoFileMonitor( ss_prefix.str(), " ", false, true ) );
     checkpoint.add(fileMonitor);
 
     eoStdoutMonitor* stdMonitor = NULL;
@@ -492,14 +587,14 @@ int main(int argc, char *argv[])
     std::ostringstream ss_avg;
     ss_avg << "avg_ones_isl" << GRANK;
     eoAverageStat<EOT>& avg = state.storeFunctor( new eoAverageStat<EOT>( ss_avg.str() ) );
-    checkpoint.add(avg);
+    // checkpoint.add(avg);
     fileMonitor.add(avg);
     if (printBest) { stdMonitor->add(avg); }
 
     std::ostringstream ss_delta;
     ss_delta << "delta_avg_ones_isl" << GRANK;
     AverageDeltaFitnessStat<EOT>& avg_delta = state.storeFunctor( new AverageDeltaFitnessStat<EOT>( ss_delta.str() ) );
-    checkpoint.add(avg_delta);
+    // checkpoint.add(avg_delta);
     fileMonitor.add(avg_delta);
     if (printBest) { stdMonitor->add(avg_delta); }
 
@@ -522,7 +617,7 @@ int main(int argc, char *argv[])
     fileMonitor.add(output);
     if (printBest) { stdMonitor->add(output); }
 
-    for (int i = 0; i < vecProba.size(); ++i)
+    for (size_t i = 0; i < vecProba.size(); ++i)
 	{
 	    std::ostringstream ss;
 	    ss << "P" << GRANK << "to" << i;
@@ -532,24 +627,31 @@ int main(int argc, char *argv[])
 	    if (printBest) { stdMonitor->add(migProba); }
 	}
 
-    std::ostringstream ss_sum;
-    ss_sum << "P" << GRANK << "to*";
-    GetSumVectorProbability& sumProba = state.storeFunctor( new GetSumVectorProbability( vecProba, ss_sum.str() ) );
-    checkpoint.add(sumProba);
-    fileMonitor.add(sumProba);
-    if (printBest) { stdMonitor->add(sumProba); }
+    // std::ostringstream ss_sum;
+    // ss_sum << "P" << GRANK << "to*";
+    // GetSumVectorProbability& sumProba = state.storeFunctor( new GetSumVectorProbability( vecProba, ss_sum.str() ) );
+    // checkpoint.add(sumProba);
+    // fileMonitor.add(sumProba);
+    // if (printBest) { stdMonitor->add(sumProba); }
+
+    std::ostringstream ss_proba;
+    ss_proba << "P" << GRANK << "to*";
+    GetMigrationProbabilityRet& migProbaRet = state.storeFunctor( new GetMigrationProbabilityRet( vecProbaRet, ss_proba.str() ) );
+    checkpoint.add(migProbaRet);
+    fileMonitor.add(migProbaRet);
+    if (printBest) { stdMonitor->add(migProbaRet); }
 
     vector<GetInputOutput*> outputsPerIsl;
     for (size_t i = 0; i < GALL; ++i)
-	{
-	    std::ostringstream ss;
-	    ss << "nb_migrants_isl" << GRANK << "to" << i;
-	    GetInputOutput* out = new GetInputOutput( 0, ss.str() );
-	    outputsPerIsl.push_back( out );
-	    state.storeFunctor( out );
-	    fileMonitor.add(*out);
-	    if (printBest) { stdMonitor->add(*out); }
-	}
+    	{
+    	    std::ostringstream ss;
+    	    ss << "nb_migrants_isl" << GRANK << "to" << i;
+    	    GetInputOutput* out = new GetInputOutput( 0, ss.str() );
+    	    outputsPerIsl.push_back( out );
+    	    state.storeFunctor( out );
+    	    fileMonitor.add(*out);
+    	    if (printBest) { stdMonitor->add(*out); }
+    	}
 
     /******************************************
      * Get the population size of all islands *
@@ -572,14 +674,60 @@ int main(int argc, char *argv[])
     vector< typename EOT::Fitness > vecAvg(GALL, 0);
     vector< typename EOT::Fitness > vecFeedbacks(GALL, 0);
 
-    bool check = true;
-    bool reached = false;
+    // ostringstream ss;
 
-    do
+    // ss << "gen.time." << GRANK;
+    // ofstream gen_time(ss.str());
+    // ss.str("");
+
+    // ss << "fb.time." << GRANK;
+    // ofstream fb_time(ss.str());
+    // ss.str("");
+
+    // ss << "vp.time." << GRANK;
+    // ofstream vp_time(ss.str());
+    // ss.str("");
+
+    // ss << "mig.time." << GRANK;
+    // ofstream mig_time(ss.str());
+    // ss.str("");
+
+    // ss << "eval.time." << GRANK;
+    // ofstream eval_time(ss.str());
+    // ss.str("");
+
+    // ss << "com.time." << GRANK;
+    // ofstream com_time(ss.str());
+    // ss.str("");
+
+    // ss << "noncom.time." << GRANK;
+    // ofstream noncom_time(ss.str());
+    // ss.str("");
+
+    long elapsed_mean = 0;
+    long elapsed_sum = 0;
+    long n = 0;
+
+    if (!pop.empty())
 	{
-
 	    best(pop);
-	    all_reduce(world, best.value(), best.value(), maximum<double>());
+	    avg(pop);
+	    avg_delta(pop);
+	    (*fitCont)(pop);
+	}
+
+    while ( checkpoint(pop) )
+	{
+	    auto gen_start = chrono::system_clock::now();
+	    long com_elapsed = 0;
+
+	    if (!pop.empty())
+		{
+		    best(pop);
+		    avg(pop);
+		    avg_delta(pop);
+		    if ( !(*fitCont)(pop) ) { break; }
+		}
 
 	    /**************************************************
 	     * Initialize a few variables for each generation *
@@ -591,12 +739,126 @@ int main(int argc, char *argv[])
 
 	    vector< request > reqs;
 
+	    /**********
+	     * Evolve *
+	     **********/
+
+	    {
+		auto start = chrono::system_clock::now();
+
+		for (size_t i = 0; i < pop.size(); ++i)
+		    {
+			EOT candidate = pop[i];
+
+			(*ptMon)( candidate );
+
+			candidate.invalidate();
+			eval( candidate );
+
+			if ( candidate.fitness() > pop[i].fitness() )
+			    {
+				pop[i] = candidate;
+			    }
+		    }
+
+		auto end = chrono::system_clock::now();
+
+		long elapsed = chrono::duration_cast<chrono::microseconds>(end-start).count();
+		// eval_time << elapsed << " "; eval_time.flush();
+
+		// cout << "eval elapsed microseconds: " << elapsed << endl; cout.flush();
+	    }
+
+	    /************************************************
+	     * Send feedbacks back to all islands (ANALYSE) *
+	     ************************************************/
+	    {
+		auto start = chrono::system_clock::now();
+
+		vector<typename EOT::Fitness> sums(GALL, 0);
+		vector<int> nbs(GALL, 0);
+		for (size_t i = 0; i < pop.size(); ++i)
+		    {
+			sums[pop[i].getLastIsland()] += pop[i].fitness() - pop[i].getLastFitness();
+			++nbs[pop[i].getLastIsland()];
+		    }
+
+		for (size_t i = 0; i < GALL; ++i)
+		    {
+			if (i == GRANK) { continue; }
+			reqs.push_back( world.isend( i, FEEDBACKS, nbs[i] > 0 ? sums[i] / nbs[i] : 0 ) );
+		    }
+
+		/**************************************
+		 * Receive feedbacks from all islands *
+		 **************************************/
+
+		for (size_t i = 0; i < GALL; ++i)
+		    {
+			if (i == GRANK) { continue; }
+			reqs.push_back( world.irecv( i, FEEDBACKS, vecFeedbacks[i] ) );
+		    }
+
+		vecFeedbacks[GRANK] = nbs[GRANK] > 0 ? sums[GRANK] / nbs[GRANK] : 0;
+
+		/****************************
+		 * Process all MPI requests *
+		 ****************************/
+
+		wait_all( reqs.begin(), reqs.end() );
+		reqs.clear();
+
+		auto end = chrono::system_clock::now();
+
+		long elapsed = chrono::duration_cast<chrono::microseconds>(end-start).count();
+		// fb_time << elapsed << " "; fb_time.flush();
+		com_elapsed += elapsed;
+	    }
+
+	    /************************************************
+	     * Send vecProbaRet to all islands (ANALYSE)    *
+	     ************************************************/
+	    {
+		auto start = chrono::system_clock::now();
+
+		for (size_t i = 0; i < GALL; ++i)
+		    {
+			if (i == GRANK) { continue; }
+			reqs.push_back( world.isend( i, 5, vecProba[i] ) );
+		    }
+
+		/**************************************
+		 * Receive vecProbaRet from all islands *
+		 **************************************/
+
+		for (size_t i = 0; i < GALL; ++i)
+		    {
+			if (i == GRANK) { continue; }
+			reqs.push_back( world.irecv( i, 5, vecProbaRet[i] ) );
+		    }
+
+		vecProbaRet[GRANK] = vecProba[GRANK];
+
+		/****************************
+		 * Process all MPI requests *
+		 ****************************/
+
+		wait_all( reqs.begin(), reqs.end() );
+		reqs.clear();
+
+		auto end = chrono::system_clock::now();
+
+		long elapsed = chrono::duration_cast<chrono::microseconds>(end-start).count();
+		// vp_time << elapsed << " "; vp_time.flush();
+		com_elapsed += elapsed;
+	    }
+
 	    /****************************
 	     * Update transition vector *
 	     ****************************/
 	    {
 		int best = -1;
-		typename EOT::Fitness max = 0;
+		typename EOT::Fitness max = -1;
 
 		for (size_t i = 0; i < GALL; ++i)
 		    {
@@ -607,14 +869,14 @@ int main(int argc, char *argv[])
 			    }
 		    }
 
-		//computation of epsilon vector (norm is 1)
-	    	double sum = 0;
+		// computation of epsilon vector (norm is 1)
+		double sum = 0;
 
 		vector< double > epsilon( GALL );
 
 		for ( size_t k = 0; k < GALL; ++k )
 		    {
-			epsilon[k] = rng.rand() % 100;
+			epsilon[k] = rng.rand() % 1000;
 			sum += epsilon[k];
 		    }
 
@@ -649,7 +911,7 @@ int main(int argc, char *argv[])
 		    {
 			for (size_t i = 0; i < GALL; ++i)
 			    {
-				if ( i == best )
+				if ( static_cast<int>(i) == best )
 				    {
 					vecProba[i] = beta * ( alpha * vecProba[i] + (1 - alpha) * 1000 ) + (1 - beta) * 1000 * epsilon[i];
 				    }
@@ -661,220 +923,174 @@ int main(int argc, char *argv[])
 		    }
 	    }
 
-	    /***********************************
-	     * Send individuals to all islands *
-	     ***********************************/
-	    {
-		vector< eoPop<EOT> > pops( GALL );
-
-		/*************
-		 * Selection *
-		 *************/
-
-		for (size_t i = 0; i < pop.size(); ++i)
-		    {
-			double s = 0;
-			int r = rng.rand() % 1000 + 1;
-
-			size_t j;
-			for ( j = 0; j < GALL && r > s; ++j )
-			    {
-				s += vecProba[j];
-			    }
-			--j;
-
-			pops[j].push_back(pop[i]);
-		    }
-
-		for (size_t i = 0; i < GALL; ++i)
-		    {
-			if (i == GRANK) { continue; }
-			outputsPerIsl[i]->value( pops[i].size() );
-			output.value( output.value() + pops[i].size() );
-		    }
-
-		pop.clear();
-
-		if ( best.value() < targetFitness )
-		    {
-			for ( size_t i = 0; i < GALL; ++i )
-			    {
-				reqs.push_back( world.isend( i, INDIVIDUALS, pops[i] ) );
-			    }
-		    }
-	    }
-
-	    vector< eoPop<EOT> > pops( GALL );
-
-	    /****************************************
-	     * Receive individuals from all islands *
-	     ****************************************/
-	    {
-		for (size_t i = 0; i < GALL; ++i)
-		    {
-			if ( best.value() >= targetFitness )
-			    {
-				if (i == GRANK) { continue; }
-			    }
-			reqs.push_back( world.irecv( i, INDIVIDUALS, pops[i] ) );
-		    }
-	    }
-
-	    /****************************
-	     * Process all MPI requests *
-	     ****************************/
-
-	    wait_all( reqs.begin(), reqs.end() );
-	    reqs.clear();
-
-	    /*********************
-	     * Update population *
-	     *********************/
-	    {
-		for (size_t i = 0; i < GALL; ++i)
-		    {
-			eoPop<EOT>& newpop = pops[i];
-			for (size_t j = 0; j < newpop.size(); ++j)
-			    {
-				pop.push_back( newpop[j] );
-			    }
-			if (i != GRANK)
-			    {
-				input.value( input.value() + newpop.size() );
-			    }
-		    }
-	    }
-
 	    /******************************************************************
 	     * Memorize last fitness and island of population before evolving *
 	     ******************************************************************/
 
-	    for (int i = 0; i < pop.size(); ++i)
+	    for (size_t i = 0; i < pop.size(); ++i)
 		{
 		    pop[i].addFitness();
 		    pop[i].addIsland(GRANK);
 		}
 
-	    /**********
-	     * Evolve *
-	     **********/
+	    /***********************************
+	     * Send individuals to all islands *
+	     ***********************************/
+	    {
+		auto start = chrono::system_clock::now();
 
-	    run_ea(ga, pop);
-	    algo_cont.reset();
-
-	    /************************************************
-	     * Send feedbacks back to all islands (ANALYSE) *
-	     ************************************************/
-
-	    for (size_t i = 0; i < GALL; ++i)
 		{
-		    vector<typename EOT::Fitness> sums(GALL, 0);
-		    vector<int> nbs(GALL, 0);
-		    for (int i = 0; i < pop.size(); ++i)
-			{
-			    sums[pop[i].getLastIsland()] += pop[i].fitness() - pop[i].getLastFitness();
-			    ++nbs[pop[i].getLastIsland()];
-			}
-		    if ( best.value() < targetFitness )
-			{
-			    reqs.push_back( world.isend( i, FEEDBACKS, sums[i] / nbs[i] ) );
-			}
-		}
+		    vector< eoPop<EOT> > pops( GALL );
 
-	    /**************************************
-	     * Receive feedbacks from all islands *
-	     **************************************/
+		    /*************
+		     * Selection *
+		     *************/
 
-	    for (size_t i = 0; i < GALL; ++i)
-		{
-		    if ( best.value() >= targetFitness )
+		    for (size_t i = 0; i < pop.size(); ++i)
+			{
+			    double s = 0;
+			    int r = rng.rand() % 1000 + 1;
+
+			    size_t j;
+			    for ( j = 0; j < GALL && r > s; ++j )
+				{
+				    s += vecProba[j];
+				}
+			    --j;
+
+			    pops[j].push_back(pop[i]);
+			}
+
+		    for (size_t i = 0; i < GALL; ++i)
 			{
 			    if (i == GRANK) { continue; }
+			    outputsPerIsl[i]->value( pops[i].size() );
+			    output.value( output.value() + pops[i].size() );
 			}
-		    reqs.push_back( world.irecv( i, FEEDBACKS, vecFeedbacks[i] ) );
-		}
 
-	    /****************************
-	     * Process all MPI requests *
-	     ****************************/
+		    pop.clear();
 
-	    wait_all( reqs.begin(), reqs.end() );
-	    reqs.clear();
-
-	    /*******************************
-	     * Stopping criteria reached ? *
-	     *******************************/
-
-	    // if ( best.value() >= targetFitness )
-	    // 	{
-	    // 	    world.abort(0);
-	    // 	}
-
-	    // reached = ( best.value() >= targetFitness );
-
-	    // for (size_t i = 0; i < GALL; ++i)
-	    // 	{
-	    // 	    reqs.push_back( world.isend( i, TEST, reached ) );
-	    // 	}
-
-	    // for (size_t i = 0; i < GALL; ++i)
-	    // 	{
-	    // 	    bool isReached = false;
-	    // 	    reqs.push_back( world.irecv( i, TEST, isReached ) );
-	    // 	    reached |= isReached;
-	    // 	}
-
-	    // wait_all( reqs.begin(), reqs.end() );
-	    // reqs.clear();
-
-	    // cout << "r" << reached << " "; cout.flush();
-	}
-    while ( checkpoint(pop) );
-
-    /*************************************************************************
-     * MAJ de la matrice de transition et récupération des vecteurs des iles *
-     *************************************************************************/
-
-    world.barrier();
-    if ( GRANK > 0 )
-    	{
-	    world.send( 0, 0, vecProba );
-	}
-    else
-	{
-	    for (int i = 1; i < GALL; ++i)
-		{
-		    vector<double> proba(GALL);
-		    world.recv( i, 0, proba );
-		    for (int j = 0; j < proba.size(); ++j)
+		    for ( size_t i = 0; i < GALL; ++i )
 			{
-			    probabilities(i,j) = proba[j];
+			    if (i == GRANK) { continue; }
+			    reqs.push_back( world.isend( i, INDIVIDUALS, pops[i] ) );
+			}
+
+		    eoPop<EOT>& newpop = pops[GRANK];
+		    for (size_t i = 0; i < newpop.size(); ++i)
+			{
+			    pop.push_back( newpop[i] );
 			}
 		}
-	    for (int j = 0; j < vecProba.size(); ++j)
+
+		vector< eoPop<EOT> > pops( GALL );
+
+		/****************************************
+		 * Receive individuals from all islands *
+		 ****************************************/
 		{
-		    probabilities(0,j) = vecProba[j];
+		    for (size_t i = 0; i < GALL; ++i)
+			{
+			    if (i == GRANK) { continue; }
+			    reqs.push_back( world.irecv( i, INDIVIDUALS, pops[i] ) );
+			}
 		}
 
-	    cout << probabilities;
-	    cout.flush();
+		/****************************
+		 * Process all MPI requests *
+		 ****************************/
+
+		wait_all( reqs.begin(), reqs.end() );
+		reqs.clear();
+
+		auto end = chrono::system_clock::now();
+
+		long elapsed = chrono::duration_cast<chrono::microseconds>(end-start).count();
+		// mig_time << elapsed << " "; mig_time.flush();
+		com_elapsed += elapsed;
+
+		/*********************
+		 * Update population *
+		 *********************/
+		{
+		    for (size_t i = 0; i < GALL; ++i)
+			{
+			    if (i == GRANK) { continue; }
+
+			    eoPop<EOT>& newpop = pops[i];
+			    for (size_t j = 0; j < newpop.size(); ++j)
+				{
+				    pop.push_back( newpop[j] );
+				}
+
+			    input.value( input.value() + newpop.size() );
+			}
+		}
+
+	    }
+
+	    auto gen_end = chrono::system_clock::now();
+	    long elapsed_microseconds = chrono::duration_cast<chrono::microseconds>(gen_end-gen_start).count();
+	    // gen_time << elapsed_microseconds << " "; gen_time.flush();
+	    // com_time << com_elapsed << " "; com_time.flush();
+	    // noncom_time << elapsed_microseconds - com_elapsed << " "; noncom_time.flush();
+
+	    ++n;
+	    elapsed_mean += (elapsed_microseconds - elapsed_mean) / n;
+	    elapsed_sum += elapsed_microseconds;
+
+	    // cout << "generation elapsed microseconds: " << chrono::duration_cast<chrono::microseconds>(gen_end-gen_start).count()
+	    // 	 << " mean: " << elapsed_mean
+	    // 	 << " sum: " << elapsed_sum
+	    // 	 << endl; cout.flush();
 	}
+
+    world.abort(0);
+
+    // /*************************************************************************
+    //  * MAJ de la matrice de transition et récupération des vecteurs des iles *
+    //  *************************************************************************/
+
+    // world.barrier();
+    // if ( GRANK > 0 )
+    // 	{
+    // 	    world.send( 0, 0, vecProba );
+    // 	}
+    // else
+    // 	{
+    // 	    for (int i = 1; i < GALL; ++i)
+    // 		{
+    // 		    vector<double> proba(GALL);
+    // 		    world.recv( i, 0, proba );
+    // 		    for (int j = 0; j < proba.size(); ++j)
+    // 			{
+    // 			    probabilities(i,j) = proba[j];
+    // 			}
+    // 		}
+    // 	    for (int j = 0; j < vecProba.size(); ++j)
+    // 		{
+    // 		    probabilities(0,j) = vecProba[j];
+    // 		}
+
+    // 	    cout << probabilities;
+    // 	    cout.flush();
+    // 	}
 
     /******************************************
      * Get the population size of all islands *
      ******************************************/
 
-    world.barrier();
-    print_sum(pop);
+    // world.barrier();
+    // print_sum(pop);
 
     /*********
      * DEBUG *
      *********/
 
-    world.barrier();
-    eo::log << eo::progress;
-    copy(vecAvg.begin(), vecAvg.end(), ostream_iterator<typename EOT::Fitness>(eo::log, " "));
-    eo::log << endl; eo::log.flush();
+    // world.barrier();
+    // eo::log << eo::progress;
+    // copy(vecAvg.begin(), vecAvg.end(), ostream_iterator<typename EOT::Fitness>(eo::log, " "));
+    // eo::log << endl; eo::log.flush();
 
     return 0;
 }

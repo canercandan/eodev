@@ -86,7 +86,7 @@ INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIRS})
 LINK_DIRECTORIES(${Boost_LIBRARY_DIRS})
 
 SET (BOOST_TEST_LIST
-    # t-boost-mpi-graph-isendirecv_eompi_pop_alone2
+    t-boost-mpi-graph-isendirecv_eompi_pop_alone2
     t-boost-mpi-graph-isendirecv_eompi_pop_alone2_mt
     )
 
