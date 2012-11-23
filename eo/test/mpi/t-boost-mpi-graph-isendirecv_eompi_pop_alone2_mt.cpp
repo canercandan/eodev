@@ -21,6 +21,7 @@
 #include <mutex>
 #include <atomic>
 #include <queue>
+#include <chrono>
 
 #include <eo>
 #include <ga.h>
@@ -39,6 +40,9 @@
 #include "make_algo_scalar.h"
 
 using namespace std;
+
+#include "nkLandscapesEval.h"
+
 using namespace eo::mpi;
 using namespace MPI;
 using namespace boost::mpi;
@@ -415,10 +419,13 @@ int main(int argc, char *argv[])
      * Déclaration des composants EO *
      *********************************/
 
-    unsigned chromSize = parser.getORcreateParam(unsigned(1500), "chromSize", "The length of the bitstrings", 'n',"Problem").value();
+    unsigned chromSize = parser.getORcreateParam(unsigned(1000), "chromSize", "The length of the bitstrings", 'n',"Problem").value();
     eoInit<EOT>& init = make_genotype(parser, state, EOT(), 0);
 
-    my::OneMaxEval<EOT> mainEval;
+    string nklInstance =  parser.getORcreateParam(string(), "nklInstance", "filename of the instance for NK-L problem", 0, "Problem").value();
+
+    // my::OneMaxEval<EOT> mainEval;
+    nkLandscapesEval<EOT> mainEval;
     eoEvalFuncCounter<EOT> eval(mainEval);
 
     /*unsigned popSize = */parser.getORcreateParam(unsigned(100), "popSize", "Population Size", 'P', "Evolution Engine")/*.value()*/;
@@ -500,6 +507,8 @@ int main(int argc, char *argv[])
     make_parallel(parser);
     make_verbose(parser);
     make_help(parser);
+
+    mainEval.load(nklInstance.c_str()); // nklandscapeseval specific
 
     /******************************************************************************
      * Création de la matrice de transition et distribution aux iles des vecteurs *
@@ -674,9 +683,17 @@ int main(int argc, char *argv[])
     bool done = false;
 
     thread talgo([&] {
-	    /*******************************
-	     * Stopping criteria reached ? *
-	     *******************************/
+	    unique_lock<mutex> lk(m);
+
+	    ostringstream ss;
+
+	    ss << "talgo_gen.time." << GRANK;
+	    ofstream talgo_gen_time(ss.str());
+	    ss.str("");
+
+	    ss << "talgo_eval.time." << GRANK;
+	    ofstream talgo_eval_time(ss.str());
+	    ss.str("");
 
 	    if (!pop.empty())
 		{
@@ -686,9 +703,13 @@ int main(int argc, char *argv[])
 		    (*fitCont)(pop);
 		}
 
+	    /*******************************
+	     * Stopping criteria reached ? *
+	     *******************************/
+
 	    while ( checkpoint(pop) )
 		{
-		    unique_lock<mutex> lk(m);
+		    auto gen_start = chrono::system_clock::now();
 
 		    if (!pop.empty())
 			{
@@ -716,20 +737,31 @@ int main(int argc, char *argv[])
 		    // run_ea(ga, pop);
 		    // algo_cont.reset();
 
-		    for (size_t i = 0; i < pop.size(); ++i)
-		    	{
-		    	    EOT candidate = pop[i];
+		    {
+			auto start = chrono::system_clock::now();
 
-		    	    (*ptMon)( candidate );
+			for (size_t i = 0; i < pop.size(); ++i)
+			    {
+				EOT candidate = pop[i];
 
-			    candidate.invalidate();
-		    	    eval( candidate );
+				(*ptMon)( candidate );
 
-		    	    if ( candidate.fitness() > pop[i].fitness() )
-		    	    	{
-		    		    pop[i] = candidate;
-		    		}
-		    	}
+				candidate.invalidate();
+				eval( candidate );
+
+				if ( candidate.fitness() > pop[i].fitness() )
+				    {
+					pop[i] = candidate;
+				    }
+			    }
+
+			auto end = chrono::system_clock::now();
+
+			long elapsed = chrono::duration_cast<chrono::microseconds>(end-start).count();
+			talgo_eval_time << elapsed << " "; talgo_eval_time.flush();
+
+			// cout << "eval elapsed microseconds: " << elapsed << endl; cout.flush();
+		    }
 
 		    /************************************************
 		     * Send feedbacks back to all islands (ANALYSE) *
@@ -767,7 +799,7 @@ int main(int argc, char *argv[])
 		    while ( !fbr.empty() );
 
 		    /************************************************
-		     * Send vecProbaRet to all islands (ANALYSE) *
+		     * Send vecProbaRet to all islands (ANALYSE)    *
 		     ************************************************/
 
 		    for (size_t i = 0; i < GALL; ++i)
@@ -940,6 +972,9 @@ int main(int argc, char *argv[])
 			while ( !imm.empty() );
 		    }
 
+		    auto gen_end = chrono::system_clock::now();
+		    long elapsed_microseconds = chrono::duration_cast<chrono::microseconds>(gen_end-gen_start).count();
+		    talgo_gen_time << elapsed_microseconds << " "; talgo_gen_time.flush();
 
 		    // /*************************************************************************
 		    //  * MAJ de la matrice de transition et récupération des vecteurs des iles *
@@ -1003,8 +1038,41 @@ int main(int argc, char *argv[])
     thread tcomm([&]() {
 	    unique_lock<mutex> lk(m);
 
+	    ostringstream ss;
+
+	    ss << "tcomm_gen.time." << GRANK;
+	    ofstream tcomm_gen_time(ss.str());
+	    ss.str("");
+
+	    ss << "tcomm_fb.time." << GRANK;
+	    ofstream tcomm_fb_time(ss.str());
+	    ss.str("");
+
+	    ss << "tcomm_vp.time." << GRANK;
+	    ofstream tcomm_vp_time(ss.str());
+	    ss.str("");
+
+	    ss << "tcomm_mig.time." << GRANK;
+	    ofstream tcomm_mig_time(ss.str());
+	    ss.str("");
+
+	    ss << "tcomm_com.time." << GRANK;
+	    ofstream tcomm_com_time(ss.str());
+	    ss.str("");
+
+	    ss << "tcomm_noncom.time." << GRANK;
+	    ofstream tcomm_noncom_time(ss.str());
+	    ss.str("");
+
+	    long elapsed_mean = 0;
+	    long elapsed_sum = 0;
+	    long n = 0;
+
 	    while (!done)
 		{
+		    auto gen_start = chrono::system_clock::now();
+		    long com_elapsed = 0;
+
 		    vector< request > reqs;
 
 		    /* Notify algo */
@@ -1034,13 +1102,25 @@ int main(int argc, char *argv[])
 		     * Process all MPI requests *
 		     ****************************/
 
-		    wait_all( reqs.begin(), reqs.end() );
-		    reqs.clear();
+		    {
+			auto start = chrono::system_clock::now();
 
-		    for (size_t i = 0; i < GALL; ++i)
-		    	{
-		    	    fbr.push( make_pair(i, vec_fb[i]) );
-		    	}
+			wait_all( reqs.begin(), reqs.end() );
+			reqs.clear();
+
+			auto end = chrono::system_clock::now();
+
+			long elapsed = chrono::duration_cast<chrono::microseconds>(end-start).count();
+			tcomm_fb_time << elapsed << " "; tcomm_fb_time.flush();
+			com_elapsed += elapsed;
+
+			// cout << "feedback send/recv elapsed microseconds: " << elapsed << endl; cout.flush();
+
+			for (size_t i = 0; i < GALL; ++i)
+			    {
+				fbr.push( make_pair(i, vec_fb[i]) );
+			    }
+		    }
 
 		    /* Notify fbr */
 		    cv.notify_one();
@@ -1069,14 +1149,26 @@ int main(int argc, char *argv[])
 		     * Process all MPI requests *
 		     ****************************/
 
-		    wait_all( reqs.begin(), reqs.end() );
-		    reqs.clear();
+		    {
+			auto start = chrono::system_clock::now();
 
-		    for (size_t i = 0; i < GALL; ++i)
-		    	{
-		    	    vpr.push( make_pair(i, vec_vp[i]) );
-			    // cout << "vec_vp[i]" << vec_vp[i] << endl; cout.flush();
-		    	}
+			wait_all( reqs.begin(), reqs.end() );
+			reqs.clear();
+
+			auto end = chrono::system_clock::now();
+
+			long elapsed = chrono::duration_cast<chrono::microseconds>(end-start).count();
+			tcomm_vp_time << elapsed << " "; tcomm_vp_time.flush();
+			com_elapsed += elapsed;
+
+			// cout << "probabilities send/recv elapsed microseconds: " << elapsed << endl; cout.flush();
+
+			for (size_t i = 0; i < GALL; ++i)
+			    {
+				vpr.push( make_pair(i, vec_vp[i]) );
+				// cout << "vec_vp[i]" << vec_vp[i] << endl; cout.flush();
+			    }
+		    }
 
 		    /* Notify vpr */
 		    cv.notify_one();
@@ -1106,22 +1198,55 @@ int main(int argc, char *argv[])
 		     * Process all MPI requests *
 		     ****************************/
 
-		    wait_all( reqs.begin(), reqs.end() );
-		    reqs.clear();
+		    {
+			auto start = chrono::system_clock::now();
 
-		    for (size_t i = 0; i < GALL; ++i)
-			{
-			    imm.push( make_pair(i, pops[i]) );
-			}
+			wait_all( reqs.begin(), reqs.end() );
+			reqs.clear();
+
+			auto end = chrono::system_clock::now();
+
+			long elapsed = chrono::duration_cast<chrono::microseconds>(end-start).count();
+			tcomm_mig_time << elapsed << " "; tcomm_mig_time.flush();
+			com_elapsed += elapsed;
+
+			// cout << "migration elapsed microseconds: " << elapsed << endl; cout.flush();
+
+			for (size_t i = 0; i < GALL; ++i)
+			    {
+				imm.push( make_pair(i, pops[i]) );
+			    }
+		    }
 
 		    /* Notify imm */
 		    cv.notify_one();
 
+		    auto gen_end = chrono::system_clock::now();
+
+		    long elapsed_microseconds = chrono::duration_cast<chrono::microseconds>(gen_end-gen_start).count();
+		    tcomm_gen_time << elapsed_microseconds << " "; tcomm_gen_time.flush();
+		    tcomm_com_time << com_elapsed << " "; tcomm_com_time.flush();
+		    tcomm_noncom_time << elapsed_microseconds - com_elapsed << " "; tcomm_noncom_time.flush();
+
+		    ++n;
+		    elapsed_mean += (elapsed_microseconds - elapsed_mean) / n;
+		    elapsed_sum += elapsed_microseconds;
+
+		    // cout << "generation elapsed microseconds: " << chrono::duration_cast<chrono::microseconds>(gen_end-gen_start).count()
+		    // 	 << " mean: " << elapsed_mean
+		    // 	 << " sum: " << elapsed_sum
+		    // 	 << endl; cout.flush();
 		}
 	});
 
+    auto start = chrono::system_clock::now();
+
     talgo.join();
     tcomm.join();
+
+    auto end = chrono::system_clock::now();
+
+    cout << "program elapsed microseconds: " << chrono::duration_cast<chrono::microseconds>(end-start).count() << endl; cout.flush();
 
     return 0;
 }
