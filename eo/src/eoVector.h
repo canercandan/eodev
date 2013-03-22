@@ -96,7 +96,7 @@ public:
     */
     eoVector(unsigned _size = 0, GeneType _value = GeneType())
         : EO<FitT>(), std::vector<GeneType>(_size, _value)
-#if __cplusplus > 199711L
+#if __cplusplus <= 199711L
 	, historySize(1)
 #endif
         {}
