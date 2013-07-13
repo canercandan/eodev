@@ -1,7 +1,7 @@
 // -*- mode: c++; c-indent-level: 4; c++-member-init-indent: 8; comment-column: 35; -*-
 
 //-----------------------------------------------------------------------------
-// eoSwapMutation.h
+// eoInversionMutation.h
 // (c) GeNeura Team, 2000 - EEAAX 2000 - Maarten Keijzer 2000
 // (c) INRIA Futurs - Dolphin Team - Thomas Legrand 2007
 /*
@@ -23,76 +23,84 @@
   thomas.legrand@lifl.fr
   Marc.Schoenauer@polytechnique.fr
   mak@dhi.dk
-  caner.candan@univ-angers.fr
 */
 //-----------------------------------------------------------------------------
 
-#ifndef eoSwapMutation_h
-#define eoSwapMutation_h
+#ifndef eoInversionMutation_h
+#define eoInversionMutation_h
 
 //-----------------------------------------------------------------------------
 
+template <typename EOT>
+void inversion(EOT& _eo, size_t i, size_t j)
+{
+    unsigned from, to;
+
+    // indexes
+    from = std::min(i,j);
+    to = std::max(i,j);
+
+    size_t mid = (to-from)/2;
+
+    // inversion
+    for(size_t k = 0; k <= mid; ++k)
+	{
+	    size_t parity = (to-from)%2 == 0 ? 0 : 1;
+	    std::swap(_eo[mid-k], _eo[mid+k+parity]);
+	}
+}
 
 /**
- * Swap two components of a chromosome.
+ * Inversion two components of a chromosome.
  *
  * @ingroup Variators
  */
-template<class Chrom> class eoSwapMutation: public eoMonOp<Chrom>
+template<class EOT> class eoInversionMutation: public eoMonOp<EOT>
 {
 public:
+    typedef typename EOT::AtomType GeneType;
 
     /// CTor
-    eoSwapMutation(const unsigned _howManySwaps=1): howManySwaps(_howManySwaps)
-    {
-        // consistency check
-        if(howManySwaps < 1)
-	    throw std::runtime_error("Invalid number of swaps in eoSwapMutation");
-    }
+    eoInversionMutation(){}
 
     /// The class name.
-    virtual std::string className() const { return "eoSwapMutation"; }
+    virtual std::string className() const { return "eoInversionMutation"; }
 
     /**
-     * Swap two components of the given chromosome.
-     * @param chrom The cromosome which is going to be changed.
+     * Inversion two components of the given eoosome.
+     * @param _eo The cromosome which is going to be changed.
      */
-    bool operator()(Chrom& chrom)
+    bool operator()(EOT& _eo)
     {
 	unsigned i, j;
 
-	for(unsigned int k = 0; k < howManySwaps; ++k)
-	    {
-		// generate two different indices
-		i=eo::rng.random(chrom.size());
-		do { j = eo::rng.random(chrom.size()); } while (i == j);
+	// generate two different indices
+	i=eo::rng.random(_eo.size());
+	do j = eo::rng.random(_eo.size()); while (i == j);
 
-		// swap
-		std::swap(chrom[i],chrom[j]);
-	    }
+	inversion(_eo, i, j);
+
 	return true;
     }
 
-private:
-    unsigned int howManySwaps;
 };
 
 /**
- * Swap two components of a chromosome with the guarantee to have one improvement.
+ * Inversion two components of a chromosome with the guarantee to have one improvement.
  *
  * @ingroup Variators
  */
 template<typename EOT>
-class eoFirstImprovementSwapMutation : public eoMonOp<EOT>
+class eoFirstImprovementInversionMutation : public eoMonOp<EOT>
 {
 public:
-    eoFirstImprovementSwapMutation(eoEvalFunc<EOT>& eval) : _eval(eval) {}
+    eoFirstImprovementInversionMutation(eoEvalFunc<EOT>& eval) : _eval(eval) {}
 
     /// The class name.
-    virtual std::string className() const { return "eoFirstImprovementSwapMutation"; }
+    virtual std::string className() const { return "eoFirstImprovementInversionMutation"; }
 
     /**
-     * Swap two components of the given chromosome.
+     * Inversion two components of the given chromosome.
      * @param chrom The cromosome which is going to be changed.
      */
     bool operator()(EOT& sol)
@@ -113,27 +121,27 @@ public:
     }
 
 private:
-    eoSwapMutation<EOT> _op;
+    eoInversionMutation<EOT> _op;
     eoEvalFunc<EOT>& _eval;
 };
 
 /**
- * Swap two components of a chromosome while the best improvement wasnt been reached.
+ * Inversion two components of a chromosome while the best improvement wasnt been reached.
  *
  * @ingroup Variators
  */
 template<typename EOT>
-class eoRelativeBestImprovementSwapMutation : public eoMonOp<EOT>
+class eoRelativeBestImprovementInversionMutation : public eoMonOp<EOT>
 {
 public:
     /// ctor
-    eoRelativeBestImprovementSwapMutation(eoEvalFunc<EOT>& eval) : _eval(eval) {}
+    eoRelativeBestImprovementInversionMutation(eoEvalFunc<EOT>& eval) : _eval(eval) {}
 
     /// The class name.
-    virtual std::string className() const { return "eoRelativeBestImprovementSwapMutation"; }
+    virtual std::string className() const { return "eoRelativeBestImprovementInversionMutation"; }
 
     /**
-     * Swap two components of the given chromosome.
+     * Inversion two components of the given chromosome.
      * @param chrom The cromosome which is going to be changed.
      */
     bool operator()(EOT& sol)
@@ -152,8 +160,8 @@ public:
 		EOT candidate = sol;
 		candidate.invalidate();
 
-		// swap
-		std::swap(candidate[i], candidate[j]);
+		// inversion
+		inversion(candidate, i, j);
 
 		// evaluate
 		_eval(candidate);
@@ -164,7 +172,7 @@ public:
 			best = candidate;
 		    }
 
-		// increment j in order to swap with the other indexes
+		// increment j in order to inversion with the other indexes
 		do { j = (j+1) % candidate.size(); } while (i == j);
 	    }
 
@@ -183,22 +191,22 @@ private:
 };
 
 /**
- * Swap two components of a chromosome while the best improvement wasnt been reached.
+ * Inversion two components of a chromosome while the best improvement wasnt been reached.
  *
  * @ingroup Variators
  */
 template<typename EOT>
-class eoBestImprovementSwapMutation : public eoMonOp<EOT>
+class eoBestImprovementInversionMutation : public eoMonOp<EOT>
 {
 public:
     /// ctor
-    eoBestImprovementSwapMutation(eoEvalFunc<EOT>& eval) : _eval(eval) {}
+    eoBestImprovementInversionMutation(eoEvalFunc<EOT>& eval) : _eval(eval) {}
 
     /// The class name.
-    virtual std::string className() const { return "eoBestImprovementSwapMutation"; }
+    virtual std::string className() const { return "eoBestImprovementInversionMutation"; }
 
     /**
-     * Swap two components of the given chromosome.
+     * Inversion two components of the given chromosome.
      * @param chrom The cromosome which is going to be changed.
      */
     bool operator()(EOT& sol)
@@ -220,8 +228,8 @@ public:
 			EOT candidate = sol;
 			candidate.invalidate();
 
-			// swap
-			std::swap(candidate[i], candidate[j]);
+			// inversion
+			inversion(candidate, i, j);
 
 			// evaluate
 			_eval(candidate);
@@ -232,11 +240,11 @@ public:
 				best = candidate;
 			    }
 
-			// increment j in order to swap with the other indexes
+			// increment j in order to inversion with the other indexes
 			do { j = (j+1) % sol.size(); } while (i == j);
 		    }
 
-		// increment i in order to swap with the other indexes
+		// increment i in order to inversion with the other indexes
 		i = (i+1) % sol.size();
 	    }
 
@@ -254,8 +262,9 @@ private:
     eoEvalFunc<EOT>& _eval;
 };
 
-/** @example t-eoSwapMutation.cpp
+/** @example t-eoInversionMutation.cpp
  */
+
 
 //-----------------------------------------------------------------------------
 #endif

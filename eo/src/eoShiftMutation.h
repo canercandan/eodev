@@ -74,7 +74,9 @@ template<class EOT> class eoShiftMutation: public eoMonOp<EOT>
 
       // shift
       for(unsigned int k=to ; k > from ; k--)
-                _eo[k]=_eo[k-1];
+	  {
+	      _eo[k]=_eo[k-1];
+	  }
 
       // shift the first component
       _eo[from]=tmp;
@@ -83,6 +85,207 @@ template<class EOT> class eoShiftMutation: public eoMonOp<EOT>
     }
 
 };
+
+template <typename EOT>
+void shift(EOT& _eo, size_t i, size_t j)
+{
+    unsigned from, to;
+    typename EOT::AtomType tmp;
+
+    // indexes
+    from=std::min(i,j);
+    to=std::max(i,j);
+
+    // keep the first component to change
+    tmp=_eo[to];
+
+    // shift
+    for(unsigned int k=to ; k > from ; k--)
+	{
+	    _eo[k]=_eo[k-1];
+	}
+
+    // shift the first component
+    _eo[from]=tmp;
+}
+
+/**
+ * Shift two components of a chromosome with the guarantee to have one improvement.
+ *
+ * @ingroup Variators
+ */
+template<typename EOT>
+class eoFirstImprovementShiftMutation : public eoMonOp<EOT>
+{
+public:
+    eoFirstImprovementShiftMutation(eoEvalFunc<EOT>& eval) : _eval(eval) {}
+
+    /// The class name.
+    virtual std::string className() const { return "eoFirstImprovementShiftMutation"; }
+
+    /**
+     * Shift two components of the given chromosome.
+     * @param chrom The cromosome which is going to be changed.
+     */
+    bool operator()(EOT& sol)
+    {
+	for (size_t k = 0; k < sol.size()-1; ++k)
+	    {
+		EOT candidate = sol;
+		candidate.invalidate();
+		_op(candidate);
+		_eval(candidate);
+		if ( candidate.fitness() > sol.fitness() )
+		    {
+			sol = candidate;
+			return true;
+		    }
+	    }
+	return false;
+    }
+
+private:
+    eoShiftMutation<EOT> _op;
+    eoEvalFunc<EOT>& _eval;
+};
+
+/**
+ * Shift two components of a chromosome while the best improvement wasnt been reached.
+ *
+ * @ingroup Variators
+ */
+template<typename EOT>
+class eoRelativeBestImprovementShiftMutation : public eoMonOp<EOT>
+{
+public:
+    /// ctor
+    eoRelativeBestImprovementShiftMutation(eoEvalFunc<EOT>& eval) : _eval(eval) {}
+
+    /// The class name.
+    virtual std::string className() const { return "eoRelativeBestImprovementShiftMutation"; }
+
+    /**
+     * Shift two components of the given chromosome.
+     * @param chrom The cromosome which is going to be changed.
+     */
+    bool operator()(EOT& sol)
+    {
+	// keep a best solution
+	EOT best = sol;
+
+	// select two indices from the initial solution
+	size_t i, j;
+	i = eo::rng.random(sol.size());
+	do { j = eo::rng.random(sol.size()); } while (i == j);
+
+	for (size_t k = 0; k < sol.size()-1; ++k)
+	    {
+		// create a candidate solution
+		EOT candidate = sol;
+		candidate.invalidate();
+
+		// shift
+		shift(candidate, i, j);
+
+		// evaluate
+		_eval(candidate);
+
+		// if the candidate is better than best solution we replace best by candidate
+		if ( candidate.fitness() > best.fitness() )
+		    {
+			best = candidate;
+		    }
+
+		// increment j in order to shift with the other indexes
+		do { j = (j+1) % candidate.size(); } while (i == j);
+	    }
+
+	// if the best solution is better than the initial one, we replace the solution by best
+	if ( best.fitness() > sol.fitness() )
+	    {
+		sol = best;
+		return true;
+	    }
+
+	return false;
+    }
+
+private:
+    eoEvalFunc<EOT>& _eval;
+};
+
+/**
+ * Shift two components of a chromosome while the best improvement wasnt been reached.
+ *
+ * @ingroup Variators
+ */
+template<typename EOT>
+class eoBestImprovementShiftMutation : public eoMonOp<EOT>
+{
+public:
+    /// ctor
+    eoBestImprovementShiftMutation(eoEvalFunc<EOT>& eval) : _eval(eval) {}
+
+    /// The class name.
+    virtual std::string className() const { return "eoBestImprovementShiftMutation"; }
+
+    /**
+     * Shift two components of the given chromosome.
+     * @param chrom The cromosome which is going to be changed.
+     */
+    bool operator()(EOT& sol)
+    {
+	// keep a best solution
+	EOT best = sol;
+
+	// select two indices from the initial solution
+	size_t i, j;
+	i = eo::rng.random(sol.size());
+
+	for (size_t k = 0; k < sol.size()-1; ++k)
+	    {
+		do { j = eo::rng.random(sol.size()); } while (i == j);
+
+		for (size_t l = 0; l < sol.size()-1; ++l)
+		    {
+			// create a candidate solution
+			EOT candidate = sol;
+			candidate.invalidate();
+
+			// shift
+			shift(candidate, i, j);
+
+			// evaluate
+			_eval(candidate);
+
+			// if the candidate is better than best solution we replace best by candidate
+			if ( candidate.fitness() > best.fitness() )
+			    {
+				best = candidate;
+			    }
+
+			// increment j in order to shift with the other indexes
+			do { j = (j+1) % sol.size(); } while (i == j);
+		    }
+
+		// increment i in order to shift with the other indexes
+		i = (i+1) % sol.size();
+	    }
+
+	// if the best solution is better than the initial one, we replace the solution by best
+	if ( best.fitness() > sol.fitness() )
+	    {
+		sol = best;
+		return true;
+	    }
+
+	return false;
+    }
+
+private:
+    eoEvalFunc<EOT>& _eval;
+};
+
 /** @example t-eoShiftMutation.cpp
  */
 

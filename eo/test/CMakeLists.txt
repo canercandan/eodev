@@ -68,7 +68,17 @@ SET (TEST_LIST
   t-eoInt
   t-eoInitPermutation
   t-eoSwapMutation
+  t-eoFirstImprovementSwapMutation
+  t-eoRelativeBestImprovementSwapMutation
+  t-eoBestImprovementSwapMutation
   t-eoShiftMutation
+  t-eoFirstImprovementShiftMutation
+  t-eoRelativeBestImprovementShiftMutation
+  t-eoBestImprovementShiftMutation
+  t-eoInversionMutation
+  t-eoFirstImprovementInversionMutation
+  t-eoRelativeBestImprovementInversionMutation
+  t-eoBestImprovementInversionMutation
   t-eoTwoOptMutation
   t-eoRingTopology
   t-eoSyncEasyPSO

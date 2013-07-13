@@ -1,12 +1,12 @@
 //-----------------------------------------------------------------------------
-// t-eoSwapMutation.cpp
+// t-eoInversionMutation.cpp
 //-----------------------------------------------------------------------------
 
 #include <set>
 
 #include <eo>
 #include <eoInt.h>
-#include <eoSwapMutation.h>
+#include <eoInversionMutation.h>
 
 //-----------------------------------------------------------------------------
 
@@ -17,10 +17,10 @@ typedef eoInt<double> Chrom;
 
 // double real_value(const Chrom & _chrom)
 // {
-//   double sum = 0;
-//   for (unsigned i = 0; i < _chrom.size(); i++)
-//       sum += _chrom[i];
-//   return sum/_chrom.size();
+//     double sum = 0;
+//     for (unsigned i = 0; i < _chrom.size(); i++)
+// 	sum += _chrom[i];
+//     return sum/_chrom.size();
 // }
 
 double real_value(const Chrom & _chrom)
@@ -43,14 +43,13 @@ bool check_permutation(const Chrom& _chrom)
 		{
 		    std::cout << " Error: Wrong permutation !" << std::endl;
 		    std::string s;
-		    s.append( " Wrong permutation in t-eoSwapMutation");
+		    s.append( " Wrong permutation in t-eoInversionMutation");
 		    throw std::runtime_error( s );
 		    return false;
 		}
 	}
     return true;
 }
-
 
 int main()
 {
@@ -74,17 +73,14 @@ int main()
 	    pop.push_back(chrom);
 	}
 
-
-    // a swap mutation
-    eoSwapMutation <Chrom> swap;
+    // a inversion mutation
+    eoFirstImprovementInversionMutation<Chrom> inversion(eval);
 
     for (i = 0; i < POP_SIZE; ++i)
 	{
 	    std::cout << " Initial chromosome n°" << i << " : " << pop[i] << "..." <<  std::endl;
-	    pop[i].invalidate();
-	    swap(pop[i]);
-	    eval(pop[i]);
-	    std::cout << " ... becomes : " << pop[i] << " after swap mutation" << std::endl;
+	    inversion(pop[i]);
+	    std::cout << " ... becomes : " << pop[i] << " after inversion mutation" << std::endl;
 	    check_permutation(pop[i]);
 	}
 
