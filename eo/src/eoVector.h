@@ -96,6 +96,9 @@ public:
     */
     eoVector(unsigned _size = 0, GeneType _value = GeneType())
         : EO<FitT>(), std::vector<GeneType>(_size, _value)
+#if __cplusplus <= 199711L
+	, historySize(1)
+#endif
         {}
 
     /// copy ctor abstracting from the FitT
@@ -258,7 +261,12 @@ public:
 	std::cout.flush();
 
 	size_t i = 0;
+
+#if __cplusplus > 199711L
 	for (auto it = lastIslands.crbegin(); it != lastIslands.crend(); ++it, ++i)
+#else
+	for (std::list< std::pair< size_t, size_t > >::reverse_iterator it = lastIslands.rbegin(); it != lastIslands.rend(); ++it, ++i)
+#endif
 	{
 	    size_t count = it->first;
 	    size_t last = it->second;
@@ -282,7 +290,11 @@ public:
     inline size_t getHistorySize(size_t size) const { return historySize; }
 
 private:
+#if __cplusplus > 199711L
     size_t historySize = 1;
+#else
+    size_t historySize;
+#endif
     std::list< std::pair< size_t, size_t > > lastIslands;
     std::list< FitT > lastFitnesses;
 /* !DIM */
